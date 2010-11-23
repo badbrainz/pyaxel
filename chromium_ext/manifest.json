@@ -1,6 +1,6 @@
 {
-  "name": "PyAxelWS Download Accelerator (Linux)",
-  "description": "PyAxelWS Download Accelerator",
+  "name": "PyAxelWS Download Accelerator",
+  "description": "PyAxelWS Download Accelerator for Linux",
   "version": "1.0.2",
   "permissions": ["http://pyaxelws.googlecode.com/*", "notifications", "contextMenus", "tabs"],
   "options_page": "settings.html",
