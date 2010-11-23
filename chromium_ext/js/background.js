@@ -1,16 +1,29 @@
 // misc
 function loadManifestInfo() {
-  var manifest = null;
-  var request = new XMLHttpRequest();
-  request.open("GET", chrome.extension.getURL("manifest.json"), false);
-  request.onreadystatechange = function() {
-    if (this.readyState == XMLHttpRequest.DONE) {
-      manifest = JSON.parse(this.responseText);
-      Preferences.setItem("data.version", manifest.version);
-    }
-  };
-  request.send();
+    var manifest = null;
+    var request = new XMLHttpRequest();
+    request.open("GET", chrome.extension.getURL("manifest.json"), false);
+    request.onreadystatechange = function() {
+        if (this.readyState == XMLHttpRequest.DONE) {
+            manifest = JSON.parse(this.responseText);
+            Preferences.setItem("data.version", manifest.version);
+        }
+    };
+    request.send();
 }
+
+function checkversion() {
+    var request = new XMLHttpRequest();
+    request.open("GET", chrome.extension.getURL("manifest.json"), false);
+}
+
+var notification = webkitNotifications.createNotification(
+  "images/48.png",
+  "Your version of pyaxelws is outdated!",
+  "http://goo.gl/scuqi"
+);
+
+notification.show();
 
 // context menu
 chrome.contextMenus.create({
