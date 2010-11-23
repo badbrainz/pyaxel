@@ -76,6 +76,30 @@ String.prototype.format = function(){
     return this.replace(pattern, function(capture){ return args[capture.match(/\d+/)]; });
 }
 
+var CSS = {
+    addClass: function(className) {
+	    if (!CSS.hasClass.call(this, className)) {
+		    var currentClass = this.className;
+		    this.className = currentClass + (currentClass.length? " " : "") + className;
+	    }
+    },
+
+    removeClass: function(className) {
+	    CSS.replaceClass.call(this, className);
+    },
+
+    replaceClass: function(className, newClass) {
+	    var classToRemove = new RegExp(("(^|\\s)" + className + "(\\s|$)"), "i");
+	    this.className = this.className.replace(classToRemove, function (match, p1, p2) {
+		    return newClass? (p1 + newClass + p2) : " ";
+	    }).replace(/^\s+|\s+$/g, "");
+    },
+
+    hasClass: function(className) {
+	    return (" " + this.className + " ").indexOf(" " + className + " ") > -1;
+    }
+};
+
 function bind(scope, fn) {
 	return function() { return fn.apply(scope, Array.prototype.slice.call(arguments)); }
 }

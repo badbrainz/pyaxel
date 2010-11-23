@@ -79,13 +79,6 @@ button
     background:#EBEFF9;
 }
 
-#connstatus
-{
-    color:#00B358;
-    padding:6px;
-    font-weight:bold
-}
-
 #main > .panel > .flex
 {
 	padding:16px 10px
@@ -164,6 +157,18 @@ infoTip.success
 	background:#ffe075;
 	border:solid 1px #ffc300;
 	color:#8f5600
+}
+
+#connstatus
+{
+    color:#00B358;
+    padding:6px;
+    font-weight:bold
+}
+
+#connstatus.invalid
+{
+    color:#F00000
 }
 
 p

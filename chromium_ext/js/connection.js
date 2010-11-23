@@ -91,8 +91,10 @@ Connection.prototype = {
             delete this.websocket;
             this.websocket = null;
         }
-        if (this.intervalID)
+        if (this.intervalID) {
             clearInterval(this.intervalID);
+            this.intervalID = null;
+        }
     },
 
     networkEventHandler: {

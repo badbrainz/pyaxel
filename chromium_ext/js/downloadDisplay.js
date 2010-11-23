@@ -113,12 +113,12 @@ Display.Panel = function(state) {
 
     this.canvas = createCanvas(state.id, Indicators.Pie.width, Indicators.Pie.height);
 
-    this.pieNode        = createElementWithClassName("div",      "pie");
-    this.dateNode       = createElementWithClassName("div",     "date");
-    this.rootNode       = createElementWithClassName("div",    "panel");
-    this.statusNode     = createElementWithClassName("div",   "status");
-    var labelsNode      = createElementWithClassName("div",   "labels");
-    var controlsNode    = createElementWithClassName("div", "controls");
+    this.pieNode        = createElementWithClassName("div",          "pie");
+    this.rootNode       = createElementWithClassName("div",        "panel");
+    this.statusNode     = createElementWithClassName("div",       "status");
+    var labelsNode      = createElementWithClassName("div",       "labels");
+    var controlsNode    = createElementWithClassName("div",     "controls");
+    this.dateNode       = createElementWithClassName("div", "date dyninfo");
 
     this.statusNode.appendChild(this.pieNode);
     this.rootNode.appendChild(this.dateNode);
@@ -128,18 +128,18 @@ Display.Panel = function(state) {
     var status_text = this.getStatusText();
     this.labels = {
         url         : createElementWithClassName("div",      "url",      state.url),
-        status      : createElementWithClassName("div", "status",      status_text),
+        status      : createElementWithClassName("div",   "status",    status_text),
         progress    : createElementWithClassName("div", "progress", state.progress)
     };
     for (var i in this.labels) {
         labelsNode.appendChild(this.labels[i]);
     }
     labelsNode.appendChild(controlsNode);
-    this.labels.name = createElementWithClassName("div", "name", state.name);
-    this.labels.size = createElementWithClassName("div", "size", state.size);
-    this.labels.percent = createElementWithClassName("div", "percent", state.percent);
-    this.labels.rate = createElementWithClassName("div", "rate", state.speed);
-    var title = createElementWithClassName("div", "title");
+    var title           = createElementWithClassName("div",           "title");
+    this.labels.name    = createElementWithClassName("div",            "name", state.name);
+    this.labels.size    = createElementWithClassName("div",    "size dyninfo", state.size);
+    this.labels.rate    = createElementWithClassName("div",    "rate dyninfo", state.speed);
+    this.labels.percent = createElementWithClassName("div", "percent dyninfo", state.percent);
     title.appendChild(this.labels.percent);
     title.appendChild(this.labels.size);
     title.appendChild(this.labels.rate);

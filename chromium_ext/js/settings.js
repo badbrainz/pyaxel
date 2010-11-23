@@ -32,11 +32,20 @@ var timeout = null;
 function showTooltip(type, msg) {
     setTimeout(function() {
         var node = document.querySelector("#infoTip");
-        node.className = type ? "slide success" : "slide failure";
         node.innerHTML = msg;
-        if (timeout) clearTimeout(timeout);
+        CSS.addClass.call(node, "slide");
+        if (type) {
+            CSS.addClass.call(node, "success");
+            CSS.removeClass.call(node, "failure");
+        }
+        else {
+            CSS.addClass.call(node, "failure");
+            CSS.removeClass.call(node, "success");
+        }
+        if (timeout)
+            clearTimeout(timeout);
         timeout = setTimeout(function() {
-            node.className = node.className.replace("slide", "")
+            CSS.removeClass.call(node, "slide");
         }, 5000);
     }, 400);
 }
@@ -106,7 +115,10 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     document.querySelector('#test').onclick = function() {
-        var connection = ConnectionFactory.createConnection();
+        var host = hostname.value.trim();
+        if (host === "" || !regex.valid_ip.test(host)) return;
+        var text = document.querySelector('#connstatus');
+        var connection = ConnectionFactory.createConnection("ws://{0}:{1}".format(host, Number(portnum.value.trim())));
         connection.connevent.attach(function(sender, response) {
             var event = response.event;
             if (event === ConnectionEvent.CONNECTED) {
@@ -119,10 +131,12 @@ document.addEventListener("DOMContentLoaded", function() {
                 });
             }
             else if (event === ConnectionEvent.DISCONNECTED) {
-                document.querySelector('#connstatus').innerHTML = "Success";
+                text.innerHTML = "Success";
+                CSS.removeClass.call(text, "invalid");
             }
             else if (event === ConnectionEvent.ERROR) {
-                document.querySelector('#connstatus').innerHTML = "Failure";
+                text.innerHTML = "Failure";
+                CSS.addClass.call(text, "invalid");
             }
         });
         connection.connect();
@@ -130,15 +144,15 @@ document.addEventListener("DOMContentLoaded", function() {
 
     function activatetab() {
         tabs.forEach(function(e) {
-            e.className = e.className.replace(" curr","");
-            e.panel.className = e.panel.className.replace(" curr","");
+            CSS.removeClass.call(e, "curr");
+            CSS.removeClass.call(e.panel, "curr");
         }, this);
-        this.className += " curr";
-        this.panel.className += " curr";
+        CSS.addClass.call(this, "curr");
+        CSS.addClass.call(this.panel, "curr");
     }
 
-    tab0.className += " curr";
-    tab0.panel.className += " curr";
+    CSS.addClass.call(tab0, "curr");
+    CSS.addClass.call(tab0.panel, "curr");
     tab0.onclick = activatetab;
     tab1.onclick = activatetab;
     tab2.onclick = activatetab;

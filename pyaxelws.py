@@ -516,7 +516,6 @@ class ClientSession(asynchat.async_chat):
     '''
     def processFields(self):
         data = self.getInputAsString()
-        print data
         self.resetInputBuffer()
         try:
             fields = {}
@@ -526,7 +525,7 @@ class ClientSession(asynchat.async_chat):
             self.keys.append(fields.get("Sec-WebSocket-Key1", 0))
             self.keys.append(fields.get("Sec-WebSocket-Key2", 0))
             self.origin = fields.get("Origin", "null")
-            self.location = fields.get("Location", "null")
+            self.location = fields.get("Host", "null")
         except ValueError:
             print "Error: processFields()", [data]
             self.handle_close()
@@ -548,7 +547,7 @@ class ClientSession(asynchat.async_chat):
         self.push("Upgrade: WebSocket" + CRLF)
         self.push("Connection: Upgrade" + CRLF)
         self.push("Sec-WebSocket-Origin: " + self.origin + CRLF)
-        self.push("Sec-WebSocket-Location: ws://" + self.location + CRLF)
+        self.push("Sec-WebSocket-Location: ws://" + self.location + "/" + CRLF)
         self.push("Sec-WebSocket-Protocol: sample" + CRLF2)
         self.push(challenge)
         self.set_terminator(EBYTE)

@@ -138,5 +138,6 @@ ConnectionManager.onconnevent = function(sender, response) {
         sender.destroy();
         ConnectionManager.activeCount--;
         console.log("Connection error...");
+        console.trace();
     }
 }

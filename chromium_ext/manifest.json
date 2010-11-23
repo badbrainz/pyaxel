@@ -1,12 +1,12 @@
 {
   "name": "PyAxelWS Download Accelerator",
   "description": "PyAxelWS Download Accelerator",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "permissions": ["contextMenus", "tabs"],
   "options_page": "settings.html",
   "browser_action": {
     "default_icon": "images/19.png",
-    "default_title": "Show all PyAxel downloads"
+    "default_title": "Show all PyAxelWS downloads"
   },
   "icons": {
     "16": "images/16.png",
