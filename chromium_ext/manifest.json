@@ -1,8 +1,8 @@
 {
-  "name": "PyAxelWS Download Accelerator",
+  "name": "PyAxelWS Download Accelerator (Linux)",
   "description": "PyAxelWS Download Accelerator",
   "version": "1.0.2",
-  "permissions": ["notifications", "contextMenus", "tabs"],
+  "permissions": ["http://pyaxelws.googlecode.com/*", "notifications", "contextMenus", "tabs"],
   "options_page": "settings.html",
   "browser_action": {
     "default_icon": "images/19.png",

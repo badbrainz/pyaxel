@@ -2,10 +2,11 @@ var Preferences = function() {
   var storage = window.localStorage,
   defaults = {
     "data.version": null,
+    "data.paversion": "1.0.1",
     "prefs.host": "127.0.0.1",
-    "prefs.port": 8002,
     "prefs.downloads": 2,
     "prefs.bandwidth": 0,
+    "prefs.port": 8002,
     "prefs.splits": 4,
     "prefs.path": ""
   };

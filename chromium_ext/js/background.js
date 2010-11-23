@@ -14,16 +14,24 @@ function loadManifestInfo() {
 
 function checkversion() {
     var request = new XMLHttpRequest();
-    request.open("GET", chrome.extension.getURL("manifest.json"), false);
+    request.open("GET", "http://pyaxelws.googlecode.com/hg/version.txt", false);
+    request.onreadystatechange = function() {
+        if (this.readyState == XMLHttpRequest.DONE) {
+            var data = JSON.parse(this.responseText);
+            if (Preferences.getItem("data.paversion") !== data.version) {
+                Preferences.setItem("data.paversion", data.version); // don't annoy the user next time
+                setTimeout(function() {
+                    webkitNotifications.createNotification(
+                      "images/48.png",
+                      "Your version of pyaxelws is outdated!",
+                      "v{0} {1}".format(data.version, "http://goo.gl/scuqi")
+                    ).show();
+                }, 10000);
+            }
+        }
+    };
+    request.send();
 }
-
-var notification = webkitNotifications.createNotification(
-  "images/48.png",
-  "Your version of pyaxelws is outdated!",
-  "http://goo.gl/scuqi"
-);
-
-notification.show();
 
 // context menu
 chrome.contextMenus.create({
@@ -97,6 +105,7 @@ chrome.extension.onConnect.addListener(function(port) {
 function init() {
     //DownloadHistory.init();
     loadManifestInfo();
+    checkversion();
 }
 
 init();
