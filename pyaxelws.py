@@ -1,16 +1,5 @@
 #!/usr/bin/env python
 
-""" NOTICE
-        * this implements version 76 of the IETF WebSocket Protocol draft, <http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-76>
-    TODO (in order of priority):
-        * rename duplicates (e.g., myfile(1) for [part,st,mp3]) of in-progress downloads to aviod crashing.
-        * reuse connections
-        * handle overload (limit connection count)
-        * retry n times following socket timeout
-    NOTES:
-        * suffers from ddos vulnerability
-"""
-
 import os, math, cPickle, json, time, traceback, StateManager
 import threading, urllib2, socket, asyncore, asynchat
 from ThreadPool import ThreadPool, JobRequest
@@ -28,10 +17,10 @@ EBYTE = '\xff'
 (ACK, OK, INVALID, BAD_REQUEST, ERROR, PROC, END, INCOMPLETE, STOPPED, UNDEFINED, INITIALIZING) = range(11)
 
 std_headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) Gecko/20100115 Firefox/3.6',
-    'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-    'Accept': 'text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5',
-    'Accept-Language': 'en-us,en;q=0.5',
+    "User-Agent": "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) Gecko/20100115 Firefox/3.6",
+    "Accept-Charset": "ISO-8859-1,utf-8;q=0.7,*;q=0.7",
+    "Accept": "text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5",
+    "Accept-Language": "en-us,en;q=0.5",
 }
 
 ## {{{ http://code.activestate.com/recipes/52215/ (r1)
@@ -176,12 +165,12 @@ class Connection:
             self.offset = offset
             self.progress = progress
 
-    def __init__(self, output_fd, url, fsize, pickle={}):
+    def __init__(self, output_fn, url, fsize, pickle={}):
         self.url = url
         self.sleep_timer = 0.0
         self.need_to_quit = False
-        self.output_fd = output_fd
-        self.elapsed_time = pickle.get("elapsed_time", 0)
+        self.output_fn = output_fn
+        self.elapsed_time = pickle.get("elapsed_time", 1.0)
 
         config = Config()
 
@@ -225,13 +214,17 @@ class Connection:
                 data = urllib2.urlopen(request)
             except urllib2.URLError, u:
                 pass
-                #print "Error: %s: %s\n " % (name, u.reason)
             else:
                 break
 
+        output = os.open(self.output_fn, os.O_WRONLY)
+        os.lseek(output, state.offset, os.SEEK_SET)
+
         block_size = 1024
         while state.length > 0:
-            if self.need_to_quit: return
+            if self.need_to_quit:
+                os.close(output)
+                return
 
             time.sleep(self.sleep_timer)
 
@@ -244,17 +237,19 @@ class Connection:
                 data_block = data.read(fetch_size)
                 if len(data_block) != fetch_size:
                     print "Connection %s: len(data_block) != fetch_size." % name
+                    os.close(output)
                     return self.retrieve(state)
             except socket.timeout, s:
                 print "Connection", name, "timed out with", s, ". Retrying..."
+                os.close(output)
                 return self.retrieve(state)
 
-            os.lseek(self.output_fd, state.offset, os.SEEK_SET)
-            os.write(self.output_fd, data_block)
+            os.write(output, data_block)
             state.length -= fetch_size
             state.progress += fetch_size
             state.offset += len(data_block)
 
+        os.close(output)
         state.done = True
         return True
 
@@ -294,7 +289,6 @@ class ClientSessionState:
         self.state_fn = None
         self.output_fn = None
         self.output_fp = None
-        self.output_fd = None
         self.connection = None
         self.inprogress = False
         self.handler = handler
@@ -306,7 +300,7 @@ class ClientSessionState:
         self.state_manager.add("downloading", "ABORT", "listening", self.abortAction)
         self.state_manager.add("downloading", "STOP", "listening", self.stopAction)
         self.state_manager.add("downloading", "QUIT", "listening", self.quitAction)
-        self.state_manager.add("listening", "ABORT", "listening", self.abortAction) # find another way
+        self.state_manager.add("listening", "ABORT", "listening", self.abortAction) # TODO fix this
         self.state_manager.add("listening", "QUIT", "listening", self.quitAction)
         self.state_manager.start("identity")
 
@@ -353,7 +347,7 @@ class ClientSessionState:
         url = args.get("url")
         file_info = get_file_info(url)
 
-        if len(file_info) == 0: # don't do this
+        if len(file_info) == 0: # TODO fix this
             raise Exception("Couldn't retrieve file info <%s>" % url2pathname(url))
 
         path = self.config.download_path
@@ -381,10 +375,12 @@ class ClientSessionState:
 
         state_fn = file_name + ".st"
         state_info = get_state_info(path + state_fn)
+
         output_fd = os.open(file_path + ".part", os.O_CREAT | os.O_WRONLY)
+        os.close(output_fd)
 
         #self.delay =  1e6 / (self.handler.getMaxSpeed() * segments)
-        connection = Connection(output_fd, url, file_size, state_info)
+        connection = Connection(file_path + ".part", url, file_size, state_info)
 
         snapshot = connection.getSnapshot()
 
@@ -401,7 +397,6 @@ class ClientSessionState:
         self.output_fn = file_name
         self.output_fp = path
         self.state_fn = state_fn
-        self.output_fd = output_fd
         self.connection = connection
 
         self.inprogress = True
@@ -416,7 +411,6 @@ class ClientSessionState:
 
         self.state_fn = None
         self.output_fn = None
-        self.output_fd = None
 
         self.inprogress = False
 
@@ -435,7 +429,6 @@ class ClientSessionState:
             self.state_fn = None
             self.output_fp = None
             self.output_fn = None
-            self.output_fd = None
 
             self.inprogress = False
 
@@ -488,10 +481,11 @@ class ClientSessionState:
         del self.connection
 
     def destroy(self):
-        if self.output_fd != None:
-            os.close(self.output_fd)
+        pass
 
 class ClientSession(asynchat.async_chat):
+    """this implements version 76 of the IETF WebSocket Protocol draft, <http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-76>
+    """
     def __init__(self, sock, server):
         asynchat.async_chat.__init__(self, sock)
         self.strat = self.processFields
@@ -500,6 +494,7 @@ class ClientSession(asynchat.async_chat):
         self.ibuffer =[]
         self.keys = []
         self.origin = "null"
+        self.location = "null"
         self.handshaken = False
         self.stateHandler = ClientSessionState(self)
 
@@ -521,6 +516,7 @@ class ClientSession(asynchat.async_chat):
     '''
     def processFields(self):
         data = self.getInputAsString()
+        print data
         self.resetInputBuffer()
         try:
             fields = {}
@@ -530,6 +526,7 @@ class ClientSession(asynchat.async_chat):
             self.keys.append(fields.get("Sec-WebSocket-Key1", 0))
             self.keys.append(fields.get("Sec-WebSocket-Key2", 0))
             self.origin = fields.get("Origin", "null")
+            self.location = fields.get("Location", "null")
         except ValueError:
             print "Error: processFields()", [data]
             self.handle_close()
@@ -547,12 +544,12 @@ class ClientSession(asynchat.async_chat):
             self.handle_close()
             return
 
-        self.push('HTTP/1.1 101 Web Socket Protocol Handshake'+CRLF)
-        self.push('Upgrade: WebSocket'+CRLF)
-        self.push('Connection: Upgrade'+CRLF)
-        self.push('Sec-WebSocket-Origin: '+self.origin+CRLF)
-        self.push('Sec-WebSocket-Location: ws://127.0.0.1:8002/'+CRLF)
-        self.push('Sec-WebSocket-Protocol: sample'+CRLF2)
+        self.push("HTTP/1.1 101 Web Socket Protocol Handshake" + CRLF)
+        self.push("Upgrade: WebSocket" + CRLF)
+        self.push("Connection: Upgrade" + CRLF)
+        self.push("Sec-WebSocket-Origin: " + self.origin + CRLF)
+        self.push("Sec-WebSocket-Location: ws://" + self.location + CRLF)
+        self.push("Sec-WebSocket-Protocol: sample" + CRLF2)
         self.push(challenge)
         self.set_terminator(EBYTE)
         self.strat = self.processFrame
@@ -595,7 +592,6 @@ class WebSocketServer(asyncore.dispatcher):
             self.setMaxSplits(state_info.get("splits", self.config.max_splits))
 
     def handle_accept(self):
-        # remember to prevent overload
         try:
             sock, endpoint = self.accept()
         except TypeError:
