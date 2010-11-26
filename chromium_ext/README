@@ -1,5 +1,5 @@
 This extension makes use of Chromium's Context Menu API. Right-click hyperlinks
-(e.g., mp3 files) to bring up the pyaxel context menu. Open the background page
+(e.g., mp3 files) to bring up the pyaxelws context menu. Open the background page
 to view the console, which should print incoming messages (dl progress) from
 the server.
 

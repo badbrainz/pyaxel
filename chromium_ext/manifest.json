@@ -1,16 +1,19 @@
 {
-  "name": "PyAxelWS Download Accelerator",
-  "description": "PyAxelWS Download Accelerator for Linux",
-  "version": "1.0.2",
-  "permissions": ["http://pyaxelws.googlecode.com/*", "notifications", "contextMenus", "tabs"],
-  "options_page": "settings.html",
-  "browser_action": {
-    "default_icon": "images/19.png",
-    "default_title": "Show all PyAxelWS downloads"
-  },
-  "icons": {
-    "16": "images/16.png",
-    "48": "images/48.png",
-    "128": "images/128.png" },
-  "background_page": "background.html"
+   "background_page": "background.html",
+   "browser_action": {
+      "default_icon": "images/19.png",
+      "default_title": "Show all PyAxelWS downloads"
+   },
+   "description": "PyAxelWS Download Accelerator for Linux",
+   "icons": {
+      "128": "images/128.png",
+      "16": "images/16.png",
+      "48": "images/48.png"
+   },
+   "minimum_chrome_version": "6.0.414",
+   "name": "PyAxelWS Download Accelerator",
+   "options_page": "settings.html",
+   "permissions": [ "http://pyaxelws.googlecode.com/*", "notifications", "contextMenus", "tabs" ],
+   "update_url": "http://clients2.google.com/service/update2/crx",
+   "version": "1.0.3"
 }
