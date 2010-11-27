@@ -7,7 +7,9 @@ from optparse import OptionParser
 from urllib import url2pathname
 from struct import pack
 from hashlib import md5
-from sys import stdout, exc_info
+#from sys import stdout, exc_info
+from daemon import Daemon
+import sys
 
 CRLF = '\x0D\x0A'
 CRLF2 = CRLF+CRLF
@@ -25,7 +27,7 @@ std_headers = {
 
 ## {{{ http://code.activestate.com/recipes/52215/ (r1)
 def backtrace():
-    tb = exc_info()[2]
+    tb = sys.exc_info()[2]
     while 1:
         if not tb.tb_next:
             break
@@ -145,6 +147,8 @@ def general_configuration(options):
     config.nworkers = 20
     config.max_bandwidth = options.max_speed
     config.download_path = options.output_dir
+    config.config_path = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
+    config.config_fn = "pyaxel.st"
     config.max_splits = options.num_connections
     config.allotted_bandwidth = options.max_speed
     config.pool = ThreadPool(num_workers=config.nworkers)
@@ -584,7 +588,7 @@ class WebSocketServer(asyncore.dispatcher):
         asyncore.dispatcher.__init__(self)
         self.clients = []
         self.config = Config()
-        state_info = get_state_info("pyaxel.st")
+        state_info = get_state_info(self.config.config_path + self.config.config_fn)
         if len(state_info) > 0:
             self.setMaxBandwidth(state_info.get("bandwidth", self.config.max_bandwidth))
             self.setDownloadPath(state_info.get("path", self.config.download_path))
@@ -616,7 +620,7 @@ class WebSocketServer(asyncore.dispatcher):
             "splits": splits,
             "path": path
         }
-        save_state_info("pyaxel.st", state_info)
+        save_state_info(self.config.config_path + self.config.config_fn, state_info)
         self.setMaxBandwidth(bandwidth)
         self.setDownloadPath(path)
         self.setMaxSplits(splits)
@@ -652,16 +656,35 @@ class WebSocketServer(asyncore.dispatcher):
         print "WebSocket server waiting on %s ..." % repr(endpoint)
         loop = asyncore.loop
         refresh = self.refresh
-        flush = stdout.flush
+        flush = sys.stdout.flush
         while asyncore.socket_map:
             loop(timeout=1, count=1)
             refresh()
             flush()
 
     def stopService(self):
-        stdout.write('\n')
+        sys.stdout.write('\n')
         print "Stopping service"
         asyncore.close_all()
+
+class PyAxelDaemon(Daemon):
+    def run(self):
+        general_configuration()
+        config = Config()
+        endpoint = ("127.0.0.1", 8003)
+        server = WebSocketServer()
+        try:
+            server.startService(endpoint)
+        except socket.error, e:
+            (errno, strerror) = e
+            print "Error:", endpoint, strerror
+            server.stopService()
+        except KeyboardInterrupt:
+            pool = config.pool
+            pool.cancelAllJobs()
+            pool.dismissWorkers(config.nworkers)
+            server.stopService()
+            sys.stdout.flush()
 
 if __name__ == "__main__":
     usage="Usage: %prog [options]"
@@ -684,7 +707,7 @@ if __name__ == "__main__":
                       " connections here. Default port number is 8002.",
                       metavar="PORT")
     parser.add_option("-d", "--directory", dest="output_dir",
-                      type="str", default=os.getcwd()+"/",
+                      type="str", default=os.path.dirname(os.path.realpath(__file__)),
                       help="By default, files are saved to current working"
                       " directory. Use this option to change where the saved"
                       "files should go.",
@@ -707,4 +730,4 @@ if __name__ == "__main__":
         pool.cancelAllJobs()
         pool.dismissWorkers(config.nworkers)
         server.stopService()
-        stdout.flush()
+        sys.stdout.flush()
