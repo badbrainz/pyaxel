@@ -139,19 +139,21 @@ def bytes_to_str(num, prefix=True):
 def compact_msg(obj):
     return json.dumps(obj, separators=(',',':'))
 
-def general_configuration(options):
+def general_configuration():
     urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
     urllib2.install_opener(urllib2.build_opener(urllib2.HTTPCookieProcessor()))
     socket.setdefaulttimeout(20)
     config = Config()
     config.nworkers = 20
-    config.max_bandwidth = options.max_speed
-    config.download_path = options.output_dir
+    config.max_bandwidth = 200
+    config.download_path = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
     config.config_path = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
     config.config_fn = "pyaxel.st"
-    config.max_splits = options.num_connections
-    config.allotted_bandwidth = options.max_speed
+    config.max_splits = 4
+    config.allotted_bandwidth = 200
     config.pool = ThreadPool(num_workers=config.nworkers)
+    config.host = "127.0.0.1"
+    config.port = 8002
 
 class Config(object):
     def __new__(cls, *args, **kw):
@@ -667,56 +669,10 @@ class WebSocketServer(asyncore.dispatcher):
         print "Stopping service"
         asyncore.close_all()
 
-class PyAxelDaemon(Daemon):
-    def run(self):
-        general_configuration()
-        config = Config()
-        endpoint = ("127.0.0.1", 8003)
-        server = WebSocketServer()
-        try:
-            server.startService(endpoint)
-        except socket.error, e:
-            (errno, strerror) = e
-            print "Error:", endpoint, strerror
-            server.stopService()
-        except KeyboardInterrupt:
-            pool = config.pool
-            pool.cancelAllJobs()
-            pool.dismissWorkers(config.nworkers)
-            server.stopService()
-            sys.stdout.flush()
-
-if __name__ == "__main__":
-    usage="Usage: %prog [options]"
-    description="Note: options will be overridden by those that exist in the (pyaxel.st) file."
-    parser = OptionParser(usage=usage, description=description)
-    parser.add_option("-s", "--max-speed", dest="max_speed",
-                      type="int", default=0,
-                      help="Specifies maximum speed (Kbytes per second)."
-                      " Useful if you don't want the program to suck up"
-                      " all of your bandwidth",
-                      metavar="SPEED")
-    parser.add_option("-n", "--num-connections", dest="num_connections",
-                      type="int", default=4,
-                      help="You can specify an alternative number of"
-                      " connections per download here.",
-                      metavar="NUM")
-    parser.add_option("-p", "--port", dest="port",
-                      type="int", default=8002,
-                      help="You can specify the port to listen for"
-                      " connections here. Default port number is 8002.",
-                      metavar="PORT")
-    parser.add_option("-d", "--directory", dest="output_dir",
-                      type="str", default=os.path.dirname(os.path.realpath(__file__)),
-                      help="By default, files are saved to current working"
-                      " directory. Use this option to change where the saved"
-                      "files should go.",
-                      metavar="DIR")
-
-    (options, args) = parser.parse_args()
-    general_configuration(options)
+def run():
+    general_configuration()
     config = Config()
-    endpoint = ("127.0.0.1", options.port)
+    endpoint = (config.host, config.port)
     server = WebSocketServer()
 
     try:
@@ -725,9 +681,15 @@ if __name__ == "__main__":
         (errno, strerror) = e
         print "Error:", endpoint, strerror
         server.stopService()
-    except KeyboardInterrupt:
-        pool = config.pool
-        pool.cancelAllJobs()
-        pool.dismissWorkers(config.nworkers)
-        server.stopService()
-        sys.stdout.flush()
+        return
+    except Exception:
+        pass
+
+    pool = config.pool
+    pool.cancelAllJobs()
+    pool.dismissWorkers(config.nworkers)
+    server.stopService()
+    sys.stdout.flush()
+
+if __name__ == "__main__":
+    run()
