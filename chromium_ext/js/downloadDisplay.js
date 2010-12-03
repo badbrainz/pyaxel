@@ -219,6 +219,7 @@ Display.Panel.prototype = {
         }
         else if (inactive) {
             this.showIndicators(false);
+            this.labels.rate.innerHTML = "";
         }
 
         // draw progress bars
