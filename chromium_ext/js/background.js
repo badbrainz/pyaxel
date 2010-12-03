@@ -21,16 +21,96 @@ function checkversion() {
             if (Preferences.getItem("data.paversion") !== data.version) {
                 Preferences.setItem("data.paversion", data.version); // don't annoy the user next time
                 setTimeout(function() {
-                    webkitNotifications.createNotification(
-                      "images/48.png",
-                      "Your version of pyaxelws is outdated!",
-                      "v{0} {1}".format(data.version, "http://goo.gl/scuqi")
-                    ).show();
+                    var item = {
+			            title : "Your version of pyaxelws appears to be outdated.",
+			            dllink: "http://goo.gl/scuqi",
+			            chlink: "http://goo.gl/9fcSt",
+			            version: data.version
+		            };
+                    var value;
+                    var query = "?";
+                    for (var key in item) {
+	                    if (value=item[key])
+	                        query += "{0}={1}&".format(key, encodeURIComponent(value));
+                    }
+                    var url = chrome.extension.getURL("notification.html") + query;
+                    webkitNotifications.createHTMLNotification(url).show();
                 }, 10000);
             }
         }
     };
     request.send();
+}
+
+// Animation
+var width = 19;
+var height = 19;
+var canvas = null;
+var context = null;
+var props = {
+    foreimg: null,
+    backimg: null,
+    clip:  {
+        x:0,
+        y:0,
+        z:19,
+        w:10,
+        px:0,
+        py:4,
+        sx:19,
+        sy:10
+    },
+    update: function() {
+        var x = props.clip.x;
+        props.clip.x = x === width-1 ? 0 : x+1;
+    },
+    paint: function() {
+        chrome.browserAction.setIcon({imageData:context.getImageData(0, 0, width, height)});
+    }
+};
+var animation = null;
+
+function Animation(speed, duration, props) {
+    this._startTimer = new Timer(bind(this, this._drawFrame), speed);
+    this._timeoutID = null;
+    this.duration = duration;
+    this.backimg = props.backimg;
+    this.foreimg = props.foreimg;
+    this.update = props.update;
+    this.paint = props.paint;
+    this.clip = props.clip;
+}
+
+Animation.prototype = {
+    _drawBackground: function() {
+        context.clearRect(0, 0, width, height);
+        context.drawImage(this.backimg, 0, 0);
+    },
+
+    _drawForeground: function() {
+        var c = this.clip;
+        context.drawImage(this.foreimg, c.x, c.y, c.z, c.w, c.px, c.py, c.sx, c.sy);
+    },
+
+    _drawFrame: function() {
+        this.update();
+        this._drawBackground();
+        this._drawForeground();
+        this.paint();
+    },
+
+    start: function() {
+        this._startTimer.start()
+        if (this._timeoutID)
+            clearTimeout(this._timeoutID);
+        this._timeoutID = setTimeout(bind(this, this.stop), this.duration);
+    },
+
+    stop: function() {
+        this._startTimer.stop();
+        this._drawBackground();
+        this.paint();
+    }
 }
 
 // context menu
@@ -59,7 +139,6 @@ chrome.browserAction.onClicked.addListener(function(tab) {
 
 // Background
 var Background = {}
-
 Background.ports = {}
 
 Background.addPort = function(port) {
@@ -92,6 +171,7 @@ Background.removePort = function(port) {
 Background.notify = function(list, reset) {
     for (var port in Background.ports)
         Background.ports[port].postMessage({reset:reset||false, list:list});
+    animation.start();
 }
 
 Background.queueDownload = function(url) {
@@ -102,10 +182,17 @@ chrome.extension.onConnect.addListener(function(port) {
     Background.addPort(port);
 });
 
+function initAnim() {
+    props.backimg = document.getElementById("python");
+    props.foreimg = document.getElementById("bits");
+    canvas = document.getElementById("canvas");
+    context = canvas.getContext("2d");
+    animation = new Animation(120, 2600, props);
+}
+
 function init() {
     //DownloadHistory.init();
     loadManifestInfo();
     checkversion();
+    initAnim();
 }
-
-init();
