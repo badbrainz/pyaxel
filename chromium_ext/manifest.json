@@ -2,7 +2,7 @@
    "background_page": "background.html",
    "browser_action": {
       "default_icon": "images/19.png",
-      "default_title": "Show all PyAxelWS downloads"
+      "default_popup": "popup.html"
    },
    "description": "PyAxelWS Download Accelerator for Linux",
    "icons": {
@@ -15,5 +15,5 @@
    "options_page": "settings.html",
    "permissions": [ "http://pyaxelws.googlecode.com/*", "notifications", "contextMenus", "tabs" ],
    "update_url": "http://clients2.google.com/service/update2/crx",
-   "version": "1.0.5"
+   "version": "1.0.9"
 }

@@ -124,6 +124,19 @@ chrome.contextMenus.create({
 });
 
 // browser action
+function displayPage(file) {
+    var url = chrome.extension.getURL(file), len = url.length;
+    chrome.tabs.getAllInWindow(null, function(wndTabs) {
+        for (var i = 0, il = wndTabs.length; i < il; i++) {
+            if (url === wndTabs[i].url.substr(0,len)) {
+                chrome.tabs.update(wndTabs[i].id, {selected:true});
+                return;
+            }
+        }
+        chrome.tabs.create({selected:true,url:url});
+    });
+}
+/*/
 chrome.browserAction.onClicked.addListener(function(tab) {
   var url = chrome.extension.getURL("downloads.html"), len = url.length;
   chrome.tabs.getAllInWindow(null, function(wndTabs) {
@@ -136,6 +149,7 @@ chrome.browserAction.onClicked.addListener(function(tab) {
     chrome.tabs.create({selected:true,url:url});
   });
 });
+//*/
 
 // Background
 var Background = {}

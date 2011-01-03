@@ -7,9 +7,9 @@ from optparse import OptionParser
 from urllib import url2pathname
 from struct import pack
 from hashlib import md5
-#from sys import stdout, exc_info
-from daemon import Daemon
-import sys
+from sys import stdout, exc_info
+
+pyapath = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
 
 CRLF = '\x0D\x0A'
 CRLF2 = CRLF+CRLF
@@ -27,7 +27,7 @@ std_headers = {
 
 ## {{{ http://code.activestate.com/recipes/52215/ (r1)
 def backtrace():
-    tb = sys.exc_info()[2]
+    tb = exc_info()[2]
     while 1:
         if not tb.tb_next:
             break
@@ -139,21 +139,19 @@ def bytes_to_str(num, prefix=True):
 def compact_msg(obj):
     return json.dumps(obj, separators=(',',':'))
 
-def general_configuration():
+def general_configuration(options):
     urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
     urllib2.install_opener(urllib2.build_opener(urllib2.HTTPCookieProcessor()))
     socket.setdefaulttimeout(20)
     config = Config()
     config.nworkers = 20
-    config.max_bandwidth = 200
-    config.download_path = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
-    config.config_path = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
-    config.config_fn = "pyaxel.st"
-    config.max_splits = 4
-    config.allotted_bandwidth = 200
     config.pool = ThreadPool(num_workers=config.nworkers)
-    config.host = "127.0.0.1"
-    config.port = 8002
+    config.download_path = options.get("output_dir", pyapath)
+    config.max_splits = options.get("num_connections", 4)
+    config.max_bandwidth = options.get("max_speed", 0)
+    config.allotted_bandwidth = config.max_bandwidth
+    config.host = options.get("host", "127.0.0.1")
+    config.port = options.get("port", 8002)
 
 class Config(object):
     def __new__(cls, *args, **kw):
@@ -223,7 +221,7 @@ class Connection:
             else:
                 break
 
-        output = os.open(self.output_fn, os.O_WRONLY)
+        output = os.open(self.output_fn, os.O_WRONLY) # os.O_BINARY
         os.lseek(output, state.offset, os.SEEK_SET)
 
         block_size = 1024
@@ -322,11 +320,11 @@ class ClientSessionState:
             self.postMessage(compact_msg({"event":BAD_REQUEST,"data":resp}))
             raise
 
-        except StateManager.FSMError as e:
+        except StateManager.FSMError, e:
             self.postMessage(compact_msg({"event":BAD_REQUEST,"data":e}))
             raise
 
-        except Exception as e:
+        except Exception, e:
             resp = "Internal server error (%s)" % e
             self.postMessage(compact_msg({"event":BAD_REQUEST,"data":resp}))
             raise
@@ -375,9 +373,9 @@ class ClientSessionState:
         file_type = file_info.get("type")
         file_size = file_info.get("size", 0)
 
-        print "\t%20s :" % "Downloading", file_name
-        print "\t%20s :" % "Location", path
-        print "\t%20s :" % "Size", bytes_to_str(file_size)
+        print "Downloading:", file_name
+        print "Location:", path
+        print "Size:", bytes_to_str(file_size)
 
         state_fn = file_name + ".st"
         state_info = get_state_info(path + state_fn)
@@ -410,7 +408,9 @@ class ClientSessionState:
         self.postMessage(compact_msg(msg))
 
     def stopAction(self, state, cmd, args):
-        print "\t%20s :" % "Stopping", self.output_fn
+        print "Stopping:", self.output_fn
+
+        self.inprogress = False
 
         self.closeConnection()
         self.connection = None
@@ -418,25 +418,23 @@ class ClientSessionState:
         self.state_fn = None
         self.output_fn = None
 
-        self.inprogress = False
-
         self.postMessage(compact_msg({"event":STOPPED,"data":[]}))
 
     def abortAction(self, state, cmd, args):
         if self.connection != None:
-            print "\t%20s :" % "Aborting", self.output_fn
+            print "Aborting:", self.output_fn
 
-            os.remove(self.output_fp + self.state_fn)
-            os.remove(self.output_fp + self.output_fn + ".part")
+            self.inprogress = False
 
             self.closeConnection()
             self.connection = None
 
+            os.remove(self.output_fp + self.state_fn)
+            os.remove(self.output_fp + self.output_fn + ".part")
+
             self.state_fn = None
             self.output_fp = None
             self.output_fn = None
-
-            self.inprogress = False
 
         self.postMessage(compact_msg({"event":INCOMPLETE,"data":[]}))
 
@@ -467,7 +465,7 @@ class ClientSessionState:
             fpath = self.output_fp
             fname = self.output_fn
             sname = self.state_fn
-            print "\t%20s :" % "Completed", fpath + fname
+            print "Completed:", fpath + fname
 
             os.remove(fpath + sname)
             os.rename(fpath + fname + ".part", fpath + fname)
@@ -590,7 +588,7 @@ class WebSocketServer(asyncore.dispatcher):
         asyncore.dispatcher.__init__(self)
         self.clients = []
         self.config = Config()
-        state_info = get_state_info(self.config.config_path + self.config.config_fn)
+        state_info = get_state_info(pyapath + "pyaxel.st")
         if len(state_info) > 0:
             self.setMaxBandwidth(state_info.get("bandwidth", self.config.max_bandwidth))
             self.setDownloadPath(state_info.get("path", self.config.download_path))
@@ -601,7 +599,7 @@ class WebSocketServer(asyncore.dispatcher):
             sock, endpoint = self.accept()
         except TypeError:
             return
-        except socket.error as err:
+        except socket.error, err:
             #if err.args[0] != errno.ECONNABORTED:
             #    raise
             return
@@ -622,7 +620,7 @@ class WebSocketServer(asyncore.dispatcher):
             "splits": splits,
             "path": path
         }
-        save_state_info(self.config.config_path + self.config.config_fn, state_info)
+        save_state_info(pyapath + "pyaxel.st", state_info)
         self.setMaxBandwidth(bandwidth)
         self.setDownloadPath(path)
         self.setMaxSplits(splits)
@@ -658,19 +656,19 @@ class WebSocketServer(asyncore.dispatcher):
         print "WebSocket server waiting on %s ..." % repr(endpoint)
         loop = asyncore.loop
         refresh = self.refresh
-        flush = sys.stdout.flush
+        flush = stdout.flush
         while asyncore.socket_map:
             loop(timeout=1, count=1)
             refresh()
             flush()
 
     def stopService(self):
-        sys.stdout.write('\n')
+        stdout.write('\n')
         print "Stopping service"
         asyncore.close_all()
 
-def run():
-    general_configuration()
+def run(options={}):
+    general_configuration(options)
     config = Config()
     endpoint = (config.host, config.port)
     server = WebSocketServer()
@@ -682,14 +680,42 @@ def run():
         print "Error:", endpoint, strerror
         server.stopService()
         return
-    except Exception:
+    except:
         pass
 
     pool = config.pool
     pool.cancelAllJobs()
     pool.dismissWorkers(config.nworkers)
     server.stopService()
-    sys.stdout.flush()
+    stdout.flush()
 
 if __name__ == "__main__":
-    run()
+    usage="Usage: %prog [options]"
+    description="Note: options will be overridden by those that exist in the (pyaxel.st) file."
+    parser = OptionParser(usage=usage, description=description)
+    parser.add_option("-s", "--max-speed", dest="max_speed",
+                      type="int", default=0,
+                      help="Specifies maximum speed (Kbytes per second)."
+                      " Useful if you don't want the program to suck up"
+                      " all of your bandwidth",
+                      metavar="SPEED")
+    parser.add_option("-n", "--num-connections", dest="num_connections",
+                      type="int", default=4,
+                      help="You can specify an alternative number of"
+                      " connections per download here.",
+                      metavar="NUM")
+    parser.add_option("-p", "--port", dest="port",
+                      type="int", default=8002,
+                      help="You can specify the port to listen for"
+                      " connections here. Default port number is 8002.",
+                      metavar="PORT")
+    parser.add_option("-d", "--directory", dest="output_dir",
+                      type="str", default=pyapath,
+                      help="By default, files are saved to current working"
+                      " directory. Use this option to change where the saved"
+                      "files should go.",
+                      metavar="DIR")
+
+    (options, args) = parser.parse_args()
+
+    run(options.__dict__)
