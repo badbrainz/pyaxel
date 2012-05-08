@@ -2,7 +2,7 @@ var Preferences = function() {
   var storage = window.localStorage,
   defaults = {
     "data.version": null,
-    "data.paversion": "1.0.1",
+    "data.paversion": "1.0.2",
     "prefs.host": "127.0.0.1",
     "prefs.downloads": 2,
     "prefs.bandwidth": 0,

@@ -13,6 +13,6 @@ PyAxelWS protocol:
 Links:
   - WebSocket interface <http://dev.w3.org/html5/websockets/#the-websocket-interface>
   - pyaxel (original) <http://code.google.com/p/pyaxel/>
-  - pyaxelws (clone) <http://code.google.com/r/wormboyd-pyaxel-websocket-server/>
-  - pyaxelws Chrome Extension Gallery entry <>
+  - pyaxelws <http://code.google.com/p/pyaxelws/>
+  - pyaxelws Chrome Extension Gallery entry <https://chrome.google.com/extensions/detail/dimpkkdfecfbdohmdocanhjhcklkmaed>
 

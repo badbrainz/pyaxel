@@ -27,11 +27,6 @@ body
 	display:-webkit-box
 }
 
-#search > input[type="search"]
-{
-	width:200px
-}
-
 #header > #search
 {
 	-webkit-box-flex:1;
@@ -158,10 +153,9 @@ body
 	text-overflow:ellipsis
 }
 
-button
+#search > input[type="search"]
 {
-	min-width:90px;
-	padding:2px 6px
+	width:200px
 }
 
 #inputbox
@@ -178,37 +172,3 @@ button
 	-webkit-box-flex:1;
 	display:-webkit-box
 }
-
-input
-{
-	border-right:solid 1px #ddd;
-	border-bottom:solid 1px #ddd;
-	border-left:solid 1px #a6a6a6;
-	border-top:solid 1px #a6a6a6
-}
-
-input[type="url"]:required:valid
-{
-	background:lightyellow url(../images/correct.png) right center no-repeat
-}
-
-input[type="url"]:invalid
-{
-	background:#ffe8ea url(../images/incorrect.png) right center no-repeat
-}
-
-input[type="url"],input[type="number"],input[type="search"]
-{
-	padding:3px
-}
-
-input[type="number"]
-{
-	width:3em
-}
-
-input[type="url"]::-webkit-input-placeholder
-{
-	color:#789
-}
-

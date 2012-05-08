@@ -87,7 +87,8 @@ Connection.prototype = {
 
     destroy: function() {
         if (this.websocket) {
-            this.disconnect();
+            if (this.established)
+                this.disconnect();
             delete this.websocket;
             this.websocket = null;
         }
@@ -95,6 +96,8 @@ Connection.prototype = {
             clearInterval(this.intervalID);
             this.intervalID = null;
         }
+        this.download = null;
+        this.established = false;
     },
 
     networkEventHandler: {
@@ -111,6 +114,7 @@ Connection.prototype = {
         },
         onclose: function() {
             var event = this.established ? ConnectionEvent.DISCONNECTED : ConnectionEvent.ERROR;
+            this.established = false;
             this.connevent.notify({event:event});
         }
     }

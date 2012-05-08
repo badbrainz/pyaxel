@@ -23,7 +23,7 @@ function checkversion() {
                 setTimeout(function() {
                     var item = {
 			            title : "Your version of pyaxelws appears to be outdated.",
-			            dllink: "http://goo.gl/scuqi",
+			            dllink: "http://goo.gl/AEoTH",
 			            chlink: "http://goo.gl/9fcSt",
 			            version: data.version
 		            };

@@ -2,6 +2,7 @@
 <html>
     <head>
         <title>PyAxelWS Under the Hood</title>
+        <link type="text/css" rel="stylesheet" href="css/widgets.css" />
         <link type="text/css" rel="stylesheet" href="css/settings.css" />
         <script type="text/javascript" src="js/utils.js"></script>
         <script type="text/javascript" src="js/regex.js"></script>
@@ -31,7 +32,7 @@
                         <input id="port" type="text" pattern="\d+">
                     </div>
                     <div class="flex vbox-1">
-                        <div class="flex hbox-1">
+                        <div class="flex hbox-1" style="padding-bottom:2px;">
                             <button id="test">Test connection</button>
                             <span class="flex" id="connstatus"></span>
                         </div>
@@ -39,7 +40,7 @@
                 </div>
                 <div class="flex flex-v">
                     <span class="flex">Download location:</span>
-                    <input type="text" id="location" class="flex" placeholder="Enter a valid download location" pattern="(?:[a-zA-Z]+:)?\/(?:[\w\-]+\/)*">
+                    <input type="text" id="location" class="flex" placeholder="Enter a valid path name" pattern="(?:[a-zA-Z]+:)?\/(?:[\w\-]+\/)*">
                 </div>
                 <div class="flex flex-h">
                     <div class="hbox-2">

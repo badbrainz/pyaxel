@@ -128,6 +128,7 @@ ConnectionManager.onconnevent = function(sender, response) {
 
     else if (event === ConnectionEvent.DISCONNECTED) {
         delete ConnectionManager.activeCalls[download.id];
+        sender.destroy();
         ConnectionManager.activeCount--;
         ConnectionManager.establishConnection();
     }
