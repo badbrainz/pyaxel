@@ -12,14 +12,17 @@ import WebSocket
 
 pyapath = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
 
+(ACK, OK, INVALID, BAD_REQUEST, ERROR, PROC, END, INCOMPLETE, STOPPED,
+ UNDEFINED, INITIALIZING) = range(11)
+
 (IDENT, START, STOP, ABORT, QUIT) = range(5)
 
-(ACK, OK, INVALID, BAD_REQUEST, ERROR, PROC, END, INCOMPLETE, STOPPED, UNDEFINED, INITIALIZING) = range(11)
-
 std_headers = {
-    "User-Agent": "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) Gecko/20100115 Firefox/3.6",
+    "User-Agent": "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) \
+        Gecko/20100115 Firefox/3.6",
     "Accept-Charset": "ISO-8859-1,utf-8;q=0.7,*;q=0.7",
-    "Accept": "text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5",
+    "Accept": "text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,\
+        text/plain;q=0.8,image/png,*/*;q=0.5",
     "Accept-Language": "en-us,en;q=0.5",
 }
 
@@ -58,7 +61,7 @@ def get_file_size(url):
         try:
             request = urllib2.Request(url, None, std_headers)
             data = urllib2.urlopen(request)
-            content_length = int(data.info()['Content-Length'])
+            content_length = int(data.info()["Content-Length"])
         except:
             retries += 1
         else:
@@ -123,7 +126,8 @@ def bytes_to_str(num, prefix=True):
     if num == 0: return "0"
     try:
         k = math.log(num, 1024)
-        return "%.2f%s" % (num / (1024.0 ** int(k)), "" if not prefix else "bKMGTPEY"[int(k)])
+        s = "" if not prefix else "bKMGTPEY"[int(k)]
+        return "%.2f%s" % (num / (1024.0 ** int(k)), s)
     except TypeError:
         return "0"
 
@@ -144,13 +148,15 @@ def general_configuration(options):
     config.host = options.get("host", "127.0.0.1")
     config.port = options.get("port", 8002)
 
+
 class Config(object):
     def __new__(cls, *args, **kw):
-        if '_shared_state' not in cls.__dict__:
+        if "_shared_state" not in cls.__dict__:
             cls._shared_state = {}
         obj = object.__new__(cls)
         obj.__dict__ = cls._shared_state
         return obj
+
 
 class Connection:
     class DownloadState:
@@ -159,6 +165,7 @@ class Connection:
             self.length = length
             self.offset = offset
             self.progress = progress
+
 
     def __init__(self, output_fn, url, fsize, pickle={}):
         self.url = url
@@ -202,7 +209,8 @@ class Connection:
     def retrieve(self, state):
         name = threading.currentThread().getName()
         request = urllib2.Request(self.url, None, std_headers)
-        request.add_header('Range', 'bytes=%d-%d' % (state.offset, state.offset + state.length))
+        request.add_header("Range", "bytes=%d-%d" % (state.offset, state.offset
+                                                     + state.length))
 
         while 1:
             try:
@@ -231,11 +239,11 @@ class Connection:
             try:
                 data_block = data.read(fetch_size)
                 if len(data_block) != fetch_size:
-                    print "Connection %s: len(data_block) != fetch_size." % name
+                    print "Connection %s: bad read size" % name
                     os.close(output)
                     return self.retrieve(state)
             except socket.timeout, s:
-                print "Connection", name, "timed out with", s, ". Retrying..."
+                print "Connection", name, "timed out with. Retrying..."
                 os.close(output)
                 return self.retrieve(state)
 
@@ -279,6 +287,7 @@ class Connection:
     def destroy(self):
         self.need_to_quit = True
 
+
 class ClientSessionState:
     def __init__(self, session):
         self.state_fn = None
@@ -315,7 +324,7 @@ class ClientSessionState:
             self.postMessage(compact_msg({"event":BAD_REQUEST,"data":e}))
 
         except Exception, e:
-            resp = "Internal server error (%s)" % e
+            resp = "internal server error (%s)" % e
             self.postMessage(compact_msg({"event":BAD_REQUEST,"data":resp}))
             backtrace()
 
@@ -330,7 +339,8 @@ class ClientSessionState:
             self.session.end()
         elif conn_type in ["MGR","WKR"]:
             if conn_type == "MGR":
-                self.session.server.savePreferences(args.get("bw"), args.get("dlpath"), args.get("splits"))
+                self.session.server.savePreferences(args.get("bw"),
+                    args.get("dlpath"), args.get("splits"))
             self.postMessage(compact_msg({"event":ACK}))
 
     def startAction(self, state, cmd, args):
@@ -342,7 +352,7 @@ class ClientSessionState:
         file_info = get_file_info(url)
 
         if len(file_info) == 0: # TODO fix this
-            raise Exception("Couldn't retrieve file info <%s>" % url2pathname(url))
+            raise Exception("Couldn't get file info <%s>" % url2pathname(url))
 
         path = self.config.download_path
 
@@ -374,7 +384,8 @@ class ClientSessionState:
         os.close(output_fd)
 
         #self.delay =  1e6 / (self.session.getMaxSpeed() * segments)
-        connection = Connection(file_path + ".part", url, file_size, state_info)
+        connection = Connection(file_path + ".part", url, file_size,
+                                state_info)
 
         snapshot = connection.getSnapshot()
 
@@ -452,7 +463,10 @@ class ClientSessionState:
 
         save_state_info(self.output_fp + self.state_fn, snapshot)
 
-        self.session.send_message(compact_msg({"event":PROC,"data":{"prog":status,"rate":bytes_to_str(avg_speed)}}))
+        self.session.send_message(compact_msg({"event":PROC,"data":{
+                                              "prog":status,
+                                              "rate":bytes_to_str(avg_speed)}
+                                              }))
 
         if connection.isComplete():
             fpath = self.output_fp
@@ -471,8 +485,10 @@ class ClientSessionState:
         self.session.send_message(msg)
 
     def closeConnection(self):
-        self.connection.destroy()
-        del self.connection
+        if self.connection != None:
+            self.connection.destroy()
+            self.connection = None
+
 
 class ClientSession():
     def __init__(self, sock, server):
@@ -508,8 +524,10 @@ class WebSocketServer(asyncore.dispatcher):
         self.config = Config()
         state_info = get_state_info(pyapath + "pyaxel.st")
         if len(state_info) > 0:
-            self.setMaxBandwidth(state_info.get("bandwidth", self.config.max_bandwidth))
-            self.setDownloadPath(state_info.get("path", self.config.download_path))
+            self.setMaxBandwidth(state_info.get("bandwidth",
+                                 self.config.max_bandwidth))
+            self.setDownloadPath(state_info.get("path",
+                                 self.config.download_path))
             self.setMaxSplits(state_info.get("splits", self.config.max_splits))
 
     def handle_accept(self):
@@ -548,9 +566,8 @@ class WebSocketServer(asyncore.dispatcher):
         self.adjustBandwidthSetting()
 
     def setDownloadPath(self, path):
-        if not os.path.exists(path):
-            return
-        self.config.download_path = path
+        if os.path.exists(path):
+            self.config.download_path = path
 
     def setMaxSplits(self, count):
         self.config.max_splits = count
@@ -608,7 +625,7 @@ def run(options={}):
         server.startService(endpoint)
     except socket.error, e:
         (errno, strerror) = e
-        print "Error:", endpoint, strerror
+        print "error:", endpoint, strerror
         server.stopService()
         return
     except:
@@ -623,7 +640,8 @@ def run(options={}):
 
 if __name__ == "__main__":
     usage="Usage: %prog [options]"
-    description="Note: options will be overridden by those that exist in the (pyaxel.st) file."
+    description="Note: options will be overridden by those that exist in the \
+        (pyaxel.st) file."
     parser = OptionParser(usage=usage, description=description)
     parser.add_option("-s", "--max-speed", dest="max_speed",
                       type="int", default=0,
