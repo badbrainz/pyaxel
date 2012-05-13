@@ -122,17 +122,17 @@ infoTip.success
 	color:#8f5600
 }
 
-#connstatus
-{
-    color:#00B358;
-    padding-left:6px;
-    font-weight:bold
-}
+/*#connstatus*/
+/*{*/
+/*    color:#00B358;*/
+/*    padding-left:6px;*/
+/*    font-weight:bold*/
+/*}*/
 
-#connstatus.invalid
-{
-    color:#F00000
-}
+/*#connstatus.invalid*/
+/*{*/
+/*    color:#F00000*/
+/*}*/
 
 p
 {

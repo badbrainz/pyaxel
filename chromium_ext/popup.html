@@ -13,13 +13,14 @@
 body {font:13px Helvetica, Arial, sans-serif;width:140px;margin:2px;padding:0}
 </style>
 <script>
+var wnd = window;
 document.addEventListener("DOMContentLoaded", function () {
     document.querySelector("#downloads").addEventListener("click", function() {
-        window.close();
+        wnd.close();
         chrome.extension.getBackgroundPage().displayPage("downloads.html");
     }, false);
     document.querySelector("#preferences").addEventListener("click", function() {
-        window.close();
+        wnd.close();
         chrome.extension.getBackgroundPage().displayPage("settings.html");
     }, false);
 }, false);
@@ -27,6 +28,6 @@ document.addEventListener("DOMContentLoaded", function () {
 </head>
 <body>
 <div class="menuitem flex" id="downloads"><img src="../images/dbase.png" width=16 height=16 /><span>Downloads</span></div>
-<div class="menuitem flex" id="preferences"><img src="../images/gear.png" width=16 height=16 /><span>Preferences</span></div>
+<div class="menuitem flex" id="preferences"><img src="../images/gear.png" width=16 height=16 /><span>preferences</span></div>
 </body>
 </html>
