@@ -314,7 +314,7 @@ class ClientSessionState:
     def execute(self, data):
         try:
             msg = json.loads(data)
-            self.state_manager.execute(msg["cmd"], msg["arg"])
+            self.state_manager.execute(msg["cmd"], msg.get("arg"))
 
         except StateManager.TransitionError, e:
             resp = "'%s' command not recognized <State:%s>" % (e.inp, e.cur)
