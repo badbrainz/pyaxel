@@ -10,14 +10,13 @@
         <script type="text/javascript" src="js/settings.js"></script>
         <script type="text/javascript" src="js/connection.js"></script>
         <script type="text/javascript" src="js/connectionFactory.js"></script>
-        <script type="text/javascript" src="js/preferenceManager.js"></script>
     </head>
     <body>
         <img src="images/64.png" width=64 height=64 style="position:absolute;top:8px;left:8px"/>
         <div id="main" class="flex-v">
             <div id="infoTip" class=""></div>
             <div class="flex flex-h tabbar">
-                <div class="flex tab" id="tab0">Preferences</div>
+                <div class="flex tab" id="tab0">preferences</div>
                 <div class="flex tab" id="tab1">Manual</div>
                 <div class="flex tab" id="tab2">About</div>
             </div>
@@ -33,8 +32,7 @@
                     </div>
                     <div class="flex vbox-1">
                         <div class="flex hbox-1" style="padding-bottom:2px;">
-                            <button id="test">Test connection</button>
-                            <span class="flex" id="connstatus"></span>
+                            <button id="echo">Test connection</button>
                         </div>
                     </div>
                 </div>
@@ -55,7 +53,7 @@
                 <div class="flex flex-v">
                     <span class="flex">Bandwidth cap:</span>
                     <div class="flex">
-                        <input id="bandwidth" type="text" pattern="\d+">&nbsp;<span>kB/s</span>
+                        <input id="bandwidth" type="text" pattern="\d+"><span style="margin-left:.5em">kB/s</span>
                     </div>
                 </div>
                 <div class="flex">

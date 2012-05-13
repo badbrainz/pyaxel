@@ -26,7 +26,8 @@ DownloadManager.unassignedJobs = new Queue();
 DownloadManager.addJob = function(url) {
     // no copies
     function duplicate(e) { return url === e.url; }
-    if (DownloadManager.getUnassignedJobs().some(duplicate) || DownloadManager.getActiveJobs().some(duplicate))
+    if (DownloadManager.getUnassignedJobs().some(duplicate) ||
+        DownloadManager.getActiveJobs().some(duplicate))
         return;
 
     var id = "dl_" + DownloadManager.uniqueID++;
@@ -43,10 +44,12 @@ DownloadManager.addJob = function(url) {
 }
 
 DownloadManager.cancelJob = function(id) {
-    if (id in DownloadManager.unassignedCatalog) // may be in queued state
+    // may be in queued state
+    if (id in DownloadManager.unassignedCatalog)
         delete DownloadManager.unassignedCatalog[id];
 
-    if (id in DownloadManager.activeCatalog) // may be in processing state
+    // may be in processing state
+    if (id in DownloadManager.activeCatalog)
         delete DownloadManager.activeCatalog[id];
 
     DownloadManager.completedCatalog[id] = DownloadManager.catalog[id];
@@ -84,7 +87,7 @@ DownloadManager.getJob = function() {
         if (!(job.id in DownloadManager.unassignedCatalog))
             return DownloadManager.getJob();
         delete DownloadManager.unassignedCatalog[job.id];
-        //DownloadManager.activeCatalog[job.id] = job;
+//        DownloadManager.activeCatalog[job.id] = job;
     }
     return job;
 }
@@ -114,7 +117,7 @@ DownloadManager.getAllJobs = function() {
 }
 
 DownloadManager.eraseInactiveJobs = function() {
-    //DownloadManager.completedCatalog = {};
+//    DownloadManager.completedCatalog = {};
     for (var k in DownloadManager.completedCatalog) {
         delete DownloadManager.completedCatalog[k];
         delete DownloadManager.catalog[k];
@@ -132,7 +135,7 @@ DownloadManager.jobStarted = function(job) {
 }
 
 DownloadManager.jobFailed = function(job) {
-    //DownloadManager.activeCatalog[job.id] = job;
+//    DownloadManager.activeCatalog[job.id] = job;
 }
 
 DownloadManager.update = function(job) {
@@ -152,6 +155,9 @@ DownloadManager.updateFullList = function() {
 }
 
 DownloadManager.getFullList = function() {
-    return [].concat(DownloadManager.getCompletedJobs(), DownloadManager.getUnassignedJobs(), DownloadManager.getActiveJobs());
+    return DownloadManager.getAllJobs();
+//    return [].concat(DownloadManager.getCompletedJobs(),
+//                     DownloadManager.getUnassignedJobs(),
+//                     DownloadManager.getActiveJobs());
 }
 
