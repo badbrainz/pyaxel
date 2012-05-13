@@ -462,7 +462,7 @@ class ClientSessionState:
 
             self.inprogress = False
             self.state_manager.start('listening')
-            self.session.send_message(compact_msg({"event":END,"data":status}))
+            self.session.send_message(compact_msg({"event":END}))
 
     def postMessage(self, msg):
         self.session.send_message(msg)
