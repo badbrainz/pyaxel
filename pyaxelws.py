@@ -12,6 +12,8 @@ import WebSocket
 
 pyapath = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
 
+(IDENT, START, STOP, ABORT, QUIT) = range(5)
+
 (ACK, OK, INVALID, BAD_REQUEST, ERROR, PROC, END, INCOMPLETE, STOPPED, UNDEFINED, INITIALIZING) = range(11)
 
 std_headers = {
@@ -287,15 +289,16 @@ class ClientSessionState:
         self.session = session
         self.delay = 0.0
 
-        self.state_manager = StateManager.StateManager()
-        self.state_manager.add("identity", "IDENT", "listening", self.identAction)
-        self.state_manager.add("listening", "START", "downloading", self.startAction)
-        self.state_manager.add("downloading", "ABORT", "listening", self.abortAction)
-        self.state_manager.add("downloading", "STOP", "listening", self.stopAction)
-        self.state_manager.add("downloading", "QUIT", "listening", self.quitAction)
-        self.state_manager.add("listening", "ABORT", "listening", self.abortAction) # TODO fix this
-        self.state_manager.add("listening", "QUIT", "listening", self.quitAction)
-        self.state_manager.start("identity")
+        manager = StateManager.StateManager()
+        manager.add("identity", IDENT, "listening", self.identAction)
+        manager.add("listening", START, "downloading", self.startAction)
+        manager.add("downloading", ABORT, "listening", self.abortAction)
+        manager.add("downloading", STOP, "listening", self.stopAction)
+        manager.add("downloading", QUIT, "listening", self.quitAction)
+        manager.add("listening", ABORT, "listening", self.abortAction)
+        manager.add("listening", QUIT, "listening", self.quitAction)
+        manager.start("identity")
+        self.state_manager = manager
 
         self.config = Config()
 
