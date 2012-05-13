@@ -1,20 +1,16 @@
 #!/usr/bin/env python
 
-import os, math, cPickle, json, time, traceback, StateManager
-import threading, urllib2, socket, asyncore, asynchat
+import os, math, cPickle, json, time, traceback, base64, hashlib, struct, array
+import threading, urllib2, socket, asyncore, sys
+
 from ThreadPool import ThreadPool, JobRequest
 from optparse import OptionParser
 from urllib import url2pathname
-from struct import pack
-from hashlib import md5
-from sys import stdout, exc_info
+
+import StateManager
+import WebSocket
 
 pyapath = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
-
-CRLF = '\x0D\x0A'
-CRLF2 = CRLF+CRLF
-SBYTE = '\x00'
-EBYTE = '\xff'
 
 (ACK, OK, INVALID, BAD_REQUEST, ERROR, PROC, END, INCOMPLETE, STOPPED, UNDEFINED, INITIALIZING) = range(11)
 
@@ -27,7 +23,7 @@ std_headers = {
 
 ## {{{ http://code.activestate.com/recipes/52215/ (r1)
 def backtrace():
-    tb = exc_info()[2]
+    tb = sys.exc_info()[2]
     while 1:
         if not tb.tb_next:
             break
@@ -52,13 +48,6 @@ def backtrace():
             except:
                 print "<ERROR WHILE PRINTING VALUE>"
 ## end of http://code.activestate.com/recipes/52215/ }}}
-
-def gen_key(k1, k2, e8):
-    digits = lambda k: int(filter(lambda c: c in map(str, range(10)), k) or 0)
-    spaces = lambda k: len(filter(lambda c: c==' ', k))
-    r1 = digits(k1) / spaces(k1)
-    r2 = digits(k2) / spaces(k2)
-    return md5(pack('>L',r1) + pack('>L',r2) + e8).digest()
 
 def get_file_size(url):
     retries = 0
@@ -289,13 +278,13 @@ class Connection:
         self.need_to_quit = True
 
 class ClientSessionState:
-    def __init__(self, handler):
+    def __init__(self, session):
         self.state_fn = None
         self.output_fn = None
         self.output_fp = None
         self.connection = None
         self.inprogress = False
-        self.handler = handler
+        self.session = session
         self.delay = 0.0
 
         self.state_manager = StateManager.StateManager()
@@ -318,16 +307,14 @@ class ClientSessionState:
         except StateManager.TransitionError, e:
             resp = "'%s' command not recognized <State:%s>" % (e.inp, e.cur)
             self.postMessage(compact_msg({"event":BAD_REQUEST,"data":resp}))
-            raise
 
         except StateManager.FSMError, e:
             self.postMessage(compact_msg({"event":BAD_REQUEST,"data":e}))
-            raise
 
         except Exception, e:
             resp = "Internal server error (%s)" % e
             self.postMessage(compact_msg({"event":BAD_REQUEST,"data":resp}))
-            raise
+            backtrace()
 
     def noneAction(self, state, cmd, args):
         pass
@@ -337,10 +324,10 @@ class ClientSessionState:
 
         if conn_type == "ECHO":
             self.postMessage(compact_msg({"event":OK,"data":args.get("msg")}))
-            self.handler.handle_close()
+            self.session.end()
         elif conn_type in ["MGR","WKR"]:
             if conn_type == "MGR":
-                self.handler.server.savePreferences(args.get("bw"), args.get("dlpath"), args.get("splits"))
+                self.session.server.savePreferences(args.get("bw"), args.get("dlpath"), args.get("splits"))
             self.postMessage(compact_msg({"event":ACK,"data":[]}))
 
     def startAction(self, state, cmd, args):
@@ -383,7 +370,7 @@ class ClientSessionState:
         output_fd = os.open(file_path + ".part", os.O_CREAT | os.O_WRONLY)
         os.close(output_fd)
 
-        #self.delay =  1e6 / (self.handler.getMaxSpeed() * segments)
+        #self.delay =  1e6 / (self.session.getMaxSpeed() * segments)
         connection = Connection(file_path + ".part", url, file_size, state_info)
 
         snapshot = connection.getSnapshot()
@@ -438,6 +425,9 @@ class ClientSessionState:
 
         self.postMessage(compact_msg({"event":INCOMPLETE,"data":[]}))
 
+    def quitAction(self, state, cmd, args):
+        self.session.end()
+
     def update(self):
         if self.inprogress == False: return
 
@@ -459,7 +449,7 @@ class ClientSessionState:
 
         save_state_info(self.output_fp + self.state_fn, snapshot)
 
-        self.handler.sendFrame(compact_msg({"event":PROC,"data":{"prog":status,"rate":bytes_to_str(avg_speed)}}))
+        self.session.send_message(compact_msg({"event":PROC,"data":{"prog":status,"rate":bytes_to_str(avg_speed)}}))
 
         if connection.isComplete():
             fpath = self.output_fp
@@ -472,116 +462,41 @@ class ClientSessionState:
 
             self.inprogress = False
             self.state_manager.start('listening')
-            self.handler.sendFrame(compact_msg({"event":END,"data":status}))
-
-    def quitAction(self, state, cmd, args):
-        self.handler.handle_close()
+            self.session.send_message(compact_msg({"event":END,"data":status}))
 
     def postMessage(self, msg):
-        self.handler.sendFrame(msg)
+        self.session.send_message(msg)
 
     def closeConnection(self):
         self.connection.destroy()
         del self.connection
 
-    def destroy(self):
-        pass
-
-class ClientSession(asynchat.async_chat):
-    """this implements version 76 of the IETF WebSocket Protocol draft, <http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-76>
-    """
+class ClientSession():
     def __init__(self, sock, server):
-        asynchat.async_chat.__init__(self, sock)
-        self.strat = self.processFields
-        self.set_terminator(CRLF2)
         self.server = server
-        self.ibuffer =[]
-        self.keys = []
-        self.origin = "null"
-        self.location = "null"
-        self.handshaken = False
-        self.stateHandler = ClientSessionState(self)
+        self.state = ClientSessionState(self)
+        self.stream = WebSocket.Stream(sock, self)
 
-    def collect_incoming_data(self, data):
-        self.ibuffer.append(data)
+    def update(self):
+        if self.stream.handshaken:
+           self.state.update()
 
-    def found_terminator(self):
-        self.strat()
+    def send_message(self, msg):
+        self.stream.handle_response(msg)
 
-    def handle_close(self):
-        print "Connection closed %s" % repr(self.socket.getpeername())
-        self.discard_buffers()
-        self.cleanup()
-        self.close()
-    '''
-    def handle_error(self):
-        print "Unknown error"
-        self.handle_close()
-    '''
-    def processFields(self):
-        data = self.getInputAsString()
-        self.resetInputBuffer()
-        try:
-            fields = {}
-            for line in data.split(CRLF)[1:]:
-                key, val = line.split(": ", 1)
-                fields[key] = val
-            self.keys.append(fields.get("Sec-WebSocket-Key1", 0))
-            self.keys.append(fields.get("Sec-WebSocket-Key2", 0))
-            self.origin = fields.get("Origin", "null")
-            self.location = fields.get("Host", "null")
-        except ValueError:
-            print "Error: processFields()", [data]
-            self.handle_close()
-        else:
-            self.strat = self.processEnd8
-            self.set_terminator(8) # last part of challenge
+    def message_recieved(self, msg):
+        self.state.execute(msg)
 
-    def processEnd8(self):
-        data = self.getInputAsString()
-        self.resetInputBuffer()
-
-        try:
-            challenge = gen_key(self.keys[0], self.keys[1], data)
-        except ValueError:
-            self.handle_close()
-            return
-
-        self.push("HTTP/1.1 101 Web Socket Protocol Handshake" + CRLF)
-        self.push("Upgrade: WebSocket" + CRLF)
-        self.push("Connection: Upgrade" + CRLF)
-        self.push("Sec-WebSocket-Origin: " + self.origin + CRLF)
-        self.push("Sec-WebSocket-Location: ws://" + self.location + "/" + CRLF)
-        self.push("Sec-WebSocket-Protocol: sample" + CRLF2)
-        self.push(challenge)
-        self.set_terminator(EBYTE)
-        self.strat = self.processFrame
-        self.handshaken = True
-
-    def processFrame(self):
-        data = self.getInputAsString()[1:].strip() # skip \x00
-        self.resetInputBuffer()
-        try:
-            self.stateHandler.execute(data)
-        except:
-            backtrace()
-
-    def updateProgress(self):
-        if self.handshaken == True:
-           self.stateHandler.update()
-
-    def resetInputBuffer(self):
-        del self.ibuffer[:]
-
-    def getInputAsString(self):
-        return ''.join(self.ibuffer)
-
-    def sendFrame(self, msg):
-        self.push(SBYTE + msg + EBYTE)
-
-    def cleanup(self):
-        self.stateHandler.destroy()
+    def stream_closed(self):
+        self.state.closeConnection()
         self.server.removeClient(self)
+
+#    def stream_error(self):
+#        pass
+
+    def end(self):
+        self.stream.disconnect()
+
 
 class WebSocketServer(asyncore.dispatcher):
     def __init__(self):
@@ -606,12 +521,12 @@ class WebSocketServer(asyncore.dispatcher):
         else:
             if endpoint == None:
                 return
-            print "Incoming connection from %s" % repr(endpoint)
+            self.log("incoming connection from %s" % repr(endpoint))
             self.clients.append(ClientSession(sock, self))
             self.adjustBandwidthSetting()
 
     def refresh(self):
-        for c in self.clients: c.updateProgress()
+        for c in self.clients: c.update()
         for _ in self.config.pool.iterProcessedJobs(timeout=0): pass
 
     def savePreferences(self, bandwidth, path, splits):
@@ -653,19 +568,22 @@ class WebSocketServer(asyncore.dispatcher):
         self.set_reuse_addr()
         self.bind(endpoint)
         self.listen(backlog)
-        print "WebSocket server waiting on %s ..." % repr(endpoint)
+        self.log("websocket server waiting on %s ..." % repr(endpoint))
         loop = asyncore.loop
         refresh = self.refresh
-        flush = stdout.flush
+        flush = sys.stdout.flush
         while asyncore.socket_map:
             loop(timeout=1, count=1)
             refresh()
             flush()
 
     def stopService(self):
-        stdout.write('\n')
-        print "Stopping service"
-        asyncore.close_all()
+        sys.stdout.write('\n')
+        self.log("stopping service")
+        for c in self.clients: c.end()
+        asyncore.socket_map.clear()
+        #asyncore.close_all()
+
 
 def run(options={}):
     general_configuration(options)
@@ -687,7 +605,8 @@ def run(options={}):
     pool.cancelAllJobs()
     pool.dismissWorkers(config.nworkers)
     server.stopService()
-    stdout.flush()
+    sys.stdout.flush()
+
 
 if __name__ == "__main__":
     usage="Usage: %prog [options]"
