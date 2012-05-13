@@ -328,10 +328,10 @@ class ClientSessionState:
         elif conn_type in ["MGR","WKR"]:
             if conn_type == "MGR":
                 self.session.server.savePreferences(args.get("bw"), args.get("dlpath"), args.get("splits"))
-            self.postMessage(compact_msg({"event":ACK,"data":[]}))
+            self.postMessage(compact_msg({"event":ACK}))
 
     def startAction(self, state, cmd, args):
-        self.postMessage(compact_msg({"event":INITIALIZING,"data":[]}))
+        self.postMessage(compact_msg({"event":INITIALIZING}))
 
         time.sleep(1.50)
 
@@ -405,7 +405,7 @@ class ClientSessionState:
         self.state_fn = None
         self.output_fn = None
 
-        self.postMessage(compact_msg({"event":STOPPED,"data":[]}))
+        self.postMessage(compact_msg({"event":STOPPED}))
 
     def abortAction(self, state, cmd, args):
         if self.connection != None:
@@ -423,7 +423,7 @@ class ClientSessionState:
             self.output_fp = None
             self.output_fn = None
 
-        self.postMessage(compact_msg({"event":INCOMPLETE,"data":[]}))
+        self.postMessage(compact_msg({"event":INCOMPLETE}))
 
     def quitAction(self, state, cmd, args):
         self.session.end()
