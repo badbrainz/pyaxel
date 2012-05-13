@@ -1,0 +1,47 @@
+<html>
+
+    <head>
+        <style>*{margin: 0;padding: 0}body{font-size:62.5%;font-family:Verdana,Arial,sans,verdana,serif;text-shadow:#cacaca 1px 1px 1px;}#title{font-size:1.2em;}#title{font-weight:bold;font-size:1.2em;margin-bottom:4px}.flex{display:-webkit-box}.flex-v{-webkit-box-orient:vertical}.wide{-webkit-box-flex:1}.notice{}img{margin-right:3px;}a{text-decoration: none;color: #0066DD}a:hover{text-decoration:underline;text-shadow:#b9b9b9 1px 1px 1px;}#content{font-size:1.16em;}#main{margin:6px}.als{-webkit-box-align:start}</style>
+        <script>
+            document.addEventListener("DOMContentLoaded",function(){
+                var query = document.location.search.substring(1).split("&");
+                var params = {};
+		        for (var i in query) {
+			        var kv = query[i].split("=");
+			        params[kv[0]] = decodeURIComponent(kv[1]);
+		        }
+                var dlurl = params["dllink"];
+                var churl = params["chlink"];
+                var link = document.getElementById("link");
+                var title = document.getElementById("title");
+                var version = document.getElementById("version");
+                var changelog = document.getElementById("changelog");
+			    title.innerHTML = params["title"] || "";
+			    link.setAttribute("href", dlurl || "");
+			    changelog.setAttribute("href", churl || "");
+			    version.innerHTML = params["version"] || "";
+			    if (dlurl) link.onclick = function() { chrome.tabs.create({url:dlurl}); }
+			    if (churl) changelog.onclick = function() { chrome.tabs.create({url:churl}); }
+            },false);
+        </script>
+    </head>
+
+    <body>
+        <div id="main">
+            <div id="title"></div>
+            <div id="content" class="flex">
+                <img class="flex" src="/images/32.png" width=32 height=32 />
+                <div class="flex-v wide">
+                    <div>
+                        Version <span id="version"></span> is now available.
+                    </div>
+                    <div>
+                        Visit the <a id="link" href="">download page</a> to update your copy, or check out
+                        the <a id="changelog" href="">changelog</a> to see what's new.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+
+</html>

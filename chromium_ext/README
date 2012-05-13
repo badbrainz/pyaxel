@@ -1,0 +1,18 @@
+This extension makes use of Chromium's Context Menu API. Right-click hyperlinks
+(e.g., mp3 files) to bring up the pyaxelws context menu. Open the background page
+to view the console, which should print incoming messages (dl progress) from
+the server.
+
+Tested on:
+  - Chromium 9.0.591.0 (Developer Build 66866)
+  - Ubuntu 10.04, running on LinuxMint 9
+
+PyAxelWS protocol:
+  - ...
+
+Links:
+  - WebSocket interface <http://dev.w3.org/html5/websockets/#the-websocket-interface>
+  - pyaxel (original) <http://code.google.com/p/pyaxel/>
+  - pyaxelws <http://code.google.com/p/pyaxelws/>
+  - pyaxelws Chrome Extension Gallery entry <https://chrome.google.com/extensions/detail/dimpkkdfecfbdohmdocanhjhcklkmaed>
+
