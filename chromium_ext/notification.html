@@ -6,8 +6,9 @@
             document.addEventListener("DOMContentLoaded",function(){
                 var query = document.location.search.substring(1).split("&");
                 var params = {};
+                var kv;
 		        for (var i in query) {
-			        var kv = query[i].split("=");
+			        kv = query[i].split("=");
 			        params[kv[0]] = decodeURIComponent(kv[1]);
 		        }
                 var dlurl = params["dllink"];
@@ -16,12 +17,12 @@
                 var title = document.getElementById("title");
                 var version = document.getElementById("version");
                 var changelog = document.getElementById("changelog");
-			    title.innerHTML = params["title"] || "";
-			    link.setAttribute("href", dlurl || "");
-			    changelog.setAttribute("href", churl || "");
-			    version.innerHTML = params["version"] || "";
-			    if (dlurl) link.onclick = function() { chrome.tabs.create({url:dlurl}); }
-			    if (churl) changelog.onclick = function() { chrome.tabs.create({url:churl}); }
+			    title.appendChild(document.createTextNode(params["title"]));
+			    version.appendChild(document.createTextNode(params["version"]));
+			    link.setAttribute("href", dlurl);
+			    changelog.setAttribute("href", churl);
+			    //link.onclick = function() { chrome.tabs.create({url:dlurl}); }
+			    //changelog.onclick = function() { chrome.tabs.create({url:churl}); }
             },false);
         </script>
     </head>
@@ -32,13 +33,8 @@
             <div id="content" class="flex">
                 <img class="flex" src="/images/32.png" width=32 height=32 />
                 <div class="flex-v wide">
-                    <div>
-                        Version <span id="version"></span> is now available.
-                    </div>
-                    <div>
-                        Visit the <a id="link" href="">download page</a> to update your copy, or check out
-                        the <a id="changelog" href="">changelog</a> to see what's new.
-                    </div>
+                    <div>Version <span id="version"></span> is now available.</div>
+                    <div>Visit the <a id="link" href="" target="_blank">downloads page</a> to update your copy, or check out the <a id="changelog" href="" target="_blank">changelog</a> to see what's new.</div>
                 </div>
             </div>
         </div>

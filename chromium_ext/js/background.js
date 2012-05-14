@@ -1,6 +1,6 @@
 var preferences = new PropertyStorage(window.localStorage, {
 	'data.version': 0,
-	'data.paversion': '1.0.2',
+	'data.paversion': '1.1.0',
 	'prefs.host': '127.0.0.1',
 	'prefs.downloads': 2,
 	'prefs.bandwidth': 0,
@@ -9,42 +9,43 @@ var preferences = new PropertyStorage(window.localStorage, {
 	'prefs.path': ''
 });
 
-function loadManifestInfo() {
-	var manifest = null;
+function checkVersion() {
 	var request = new XMLHttpRequest();
-	request.open('GET', chrome.extension.getURL('manifest.json'), false);
+	request.open('GET', chrome.extension.getURL('manifest.json'), true);
 	request.onreadystatechange = function() {
-		if (this.readyState == XMLHttpRequest.DONE) {
-			manifest = JSON.parse(this.responseText);
-			preferences.setItem('data.version', manifest.version);
-		}
-	};
-	request.send();
-}
-
-function checkversion() {
-	var request = new XMLHttpRequest();
-	request.open('GET', 'http://pyaxelws.googlecode.com/hg/version.txt', false);
-	request.onreadystatechange = function() {
-		if (this.readyState == XMLHttpRequest.DONE) {
-			var data = JSON.parse(this.responseText);
-			if (preferences.getItem('data.paversion') !== data.version) {
-				preferences.setItem('data.paversion', data.version); // don't annoy the user next time
-				setTimeout(function() {
-					var item = {
-						title: 'Your version of pyaxelws appears to be outdated.',
-						dllink: 'http://goo.gl/AEoTH',
-						chlink: 'http://goo.gl/9fcSt',
-						version: data.version
-					};
-					var value;
-					var query = '?';
-					for (var key in item) {
-						if (value = item[key]) query += formatString('{0}={1}&', key, encodeURIComponent(value));
+		if (request.readyState == XMLHttpRequest.DONE) {
+			if (request.status == 200) {
+				var manifest = JSON.parse(request.responseText);
+				preferences.setItem('data.version', manifest.version);
+				// check python script version
+				request.open('GET', 'http://pyaxelws.googlecode.com/hg/version.txt', true);
+				request.onreadystatechange = function() {
+					if (request.readyState == XMLHttpRequest.DONE) {
+						if (request.status == 200) {
+							var data = JSON.parse(request.responseText);
+							var build = data.version.split('.');
+							var loc_build = preferences.getItem('data.paversion').split('.');
+							if (loc_build[0] < build[0] || loc_build[1] < build[1] || loc_build[2] < build[2]) {
+								preferences.setItem('data.paversion', data.version); // assume responsible user
+								window.setTimeout(function() {
+									var item = {
+										title: 'Your version of pyaxelws appears to be outdated.',
+										dllink: 'http://goo.gl/AEoTH',
+										chlink: 'http://goo.gl/9fcSt',
+										version: data.version
+									};
+									var value;
+									var query = '?';
+									for (var key in item)
+										query += formatString('{0}={1}&', key, encodeURIComponent(item[key]));
+									var url = chrome.extension.getURL('notification.html') + query;
+									window.webkitNotifications.createHTMLNotification(url).show();
+								}, 10000);
+							}
+						}
 					}
-					var url = chrome.extension.getURL('notification.html') + query;
-					window.webkitNotifications.createHTMLNotification(url).show();
-				}, 10000);
+				};
+				request.send();
 			}
 		}
 	};
@@ -124,13 +125,11 @@ var Animation = (function() {
 	}
 
 	CanvasWrapper.prototype = {
-
 		start: function() {
 			this._timer.start();
 			if (this._timeoutID) clearTimeout(this._timeoutID);
 			this._timeoutID = setTimeout(this.stop.bind(this), this.duration);
 		},
-
 		stop: function() {
 			this._timer.stop();
 			drawBackground(this.props);
@@ -155,8 +154,7 @@ function initAnim() {
 
 function init() {
 	//	DownloadHistory.init();
-	loadManifestInfo();
-	checkversion();
+	checkVersion();
 	initAnim();
 }
 
@@ -227,14 +225,15 @@ Background.notify = function(list, reset) {
 Background.queueDownload = function(href) {
 	var tokens = parseUri(href);
 	if (regex.valid_uri.test(href) && /^https?|ftp$/.test(tokens.protocol) && tokens.domain.length && tokens.fileName.length) {
-		var xmlHttpReq = new XMLHttpRequest();
-		xmlHttpReq.open('HEAD', href, true);
-		xmlHttpReq.onreadystatechange = function() {
-			if (xmlHttpReq.readyState == 4) {
-				if (xmlHttpReq.status == 200) DownloadManager.addJob(href);
+		var request = new XMLHttpRequest();
+		request.open('HEAD', href, true);
+		request.onreadystatechange = function() {
+			if (request.readyState == XMLHttpRequest.DONE) {
+				if (request.status == 200)
+					DownloadManager.addJob(href);
 			}
 		}
-		xmlHttpReq.send();
+		request.send();
 	}
 	else console.log('error: invalid request:', href);
 };
