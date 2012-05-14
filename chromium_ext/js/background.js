@@ -143,12 +143,10 @@ var Animation = (function() {
 
 function initAnim() {
 	// python
-	DownloadBadge.backimg = new Image(19, 19);
-	DownloadBadge.backimg.src = 'images/19.png';
+	DownloadBadge.backimg = document.getElementById('python');
 
 	// bits
-	DownloadBadge.foreimg = new Image(38, 10);
-	DownloadBadge.foreimg.src = 'images/bits.png';
+	DownloadBadge.foreimg = document.getElementById('bits');
 
 	canvas = document.getElementById('canvas');
 	context = canvas.getContext('2d');
