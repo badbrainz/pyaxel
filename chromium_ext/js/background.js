@@ -188,15 +188,31 @@ Background.removePort = function(port) {
 
 Background.notify = function(list, reset) {
 	for (var port in Background.ports)
-	Background.ports[port].postMessage({
-		reset: reset || false,
-		list: list
-	});
+		Background.ports[port].postMessage({
+			reset: reset || false,
+			list: list
+		});
 	animation.start();
 };
 
-Background.queueDownload = function(url) {
-	DownloadManager.addJob(url);
+Background.queueDownload = function(href) {
+	var tokens = parseUri(href);
+    if (regex.valid_uri.test(href) &&
+    	/^https?|ftp$/.test(tokens.protocol) &&
+    	tokens.domain.length &&
+    	tokens.fileName.length) {
+    		var xmlHttpReq = new XMLHttpRequest();
+            xmlHttpReq.open('HEAD', href, true);
+            xmlHttpReq.onreadystatechange = function() {
+                if (xmlHttpReq.readyState == 4) {
+                    if (xmlHttpReq.status == 200)
+						DownloadManager.addJob(href);
+                }
+            }
+            xmlHttpReq.send();
+    	}
+    else
+    	console.log('error: invalid request:', href)
 };
 
 // Chrome

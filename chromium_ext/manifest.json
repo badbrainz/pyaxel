@@ -16,7 +16,9 @@
       "48": "images/48.png"
    },
    "permissions": [
-      "http://pyaxelws.googlecode.com/*",
+      "https://*/*",
+      "http://*/*",
+      "ftp://*/*",
       "notifications",
       "contextMenus",
       "tabs"
