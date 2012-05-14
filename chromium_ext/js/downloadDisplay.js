@@ -327,20 +327,14 @@ document.addEventListener('DOMContentLoaded', function() {
     Display.init();
     port = chrome.extension.connect();
     port.onMessage.addListener(Display.showResults);
-    document.querySelector('#submit').onclick = function() {
-        var input = document.querySelector('#uri');
-        var uri = input.value.trim();
-        if (regex.valid_uri.test(uri)) {
-            var tokens = parseUri(uri);
-            if (/^(?:https?|ftp)$/.test(tokens.protocol) && tokens.domain.length > 0 && tokens.fileName.length > 0) {
-                input.value = '';
-                send('add', uri);
-            }
-        }
+    document.getElementById('submit').onclick = function() {
+        var input = document.getElementById('uri');
+        send('add', input.value.trim());
+        input.value = '';
     }
-    document.querySelector('#clear').onclick = function() {
+    document.getElementById('clear').onclick = function() {
         Display.clear();
-        send('clear', null);
+        send('clear');
     }
-    send('update', null);
+    send('update');
 }, false);
