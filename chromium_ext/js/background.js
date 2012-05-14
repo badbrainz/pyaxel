@@ -68,7 +68,6 @@ function displayPage(file) {
 }
 
 // Badge Animation
-
 var animation = null;
 var context = null;
 var canvas = null;
@@ -158,6 +157,35 @@ function init() {
 }
 
 // Background
+var CommandHandler = {
+	'add': function(arg) {
+		Background.queueDownload(arg);
+	},
+	'pause': function(arg) {
+		DownloadManager.pauseJob(arg);
+	},
+	'resume': function(arg) {
+		DownloadManager.resumeJob(arg);
+	},
+	'cancel': function(arg) {
+		DownloadManager.cancelJob(arg);
+	},
+	'retry': function(arg) {
+		DownloadManager.retryJob(arg);
+	},
+	'remove': function(arg) {
+		DownloadManager.removeJob(arg);
+	},
+	'update': function(arg) {
+		return {
+			reset: true,
+			list: DownloadManager.getFullList()
+		};
+	},
+	'clear': function(arg) {
+		DownloadManager.eraseInactiveJobs();
+	}
+};
 
 var Background = {};
 Background.ports = {};
@@ -167,16 +195,11 @@ Background.addPort = function(port) {
 
 	port.onMessage.addListener(function(msg) {
 		var cmd = msg.cmd;
-		if (cmd === 'cancel') DownloadManager.cancelJob(msg.args);
-		else if (cmd === 'remove') DownloadManager.remove(msg.args);
-		else if (cmd === 'pause') DownloadManager.pauseJob(msg.args);
-		else if (cmd === 'resume') DownloadManager.resumeJob(msg.args);
-		else if (cmd === 'update') port.postMessage({
-			reset: true,
-			list: DownloadManager.getFullList()
-		});
-		else if (cmd === 'add') Background.queueDownload(msg.args);
-		else if (cmd === 'clear') DownloadManager.eraseInactiveJobs();
+		var arg = msg.arg;
+		if (cmd in CommandHandler) {
+			var result = CommandHandler[cmd](arg);
+			if (result) port.postMessage(result);
+		}
 	});
 
 	port.onDisconnect.addListener(Background.removePort);
@@ -187,36 +210,32 @@ Background.removePort = function(port) {
 };
 
 Background.notify = function(list, reset) {
+	var msg = {
+		reset: reset || false,
+		list: list
+	};
 	for (var port in Background.ports)
-		Background.ports[port].postMessage({
-			reset: reset || false,
-			list: list
-		});
+		Background.ports[port].postMessage(msg);
+
 	animation.start();
 };
 
 Background.queueDownload = function(href) {
 	var tokens = parseUri(href);
-    if (regex.valid_uri.test(href) &&
-    	/^https?|ftp$/.test(tokens.protocol) &&
-    	tokens.domain.length &&
-    	tokens.fileName.length) {
-    		var xmlHttpReq = new XMLHttpRequest();
-            xmlHttpReq.open('HEAD', href, true);
-            xmlHttpReq.onreadystatechange = function() {
-                if (xmlHttpReq.readyState == 4) {
-                    if (xmlHttpReq.status == 200)
-						DownloadManager.addJob(href);
-                }
-            }
-            xmlHttpReq.send();
-    	}
-    else
-    	console.log('error: invalid request:', href)
+	if (regex.valid_uri.test(href) && /^https?|ftp$/.test(tokens.protocol) && tokens.domain.length && tokens.fileName.length) {
+		var xmlHttpReq = new XMLHttpRequest();
+		xmlHttpReq.open('HEAD', href, true);
+		xmlHttpReq.onreadystatechange = function() {
+			if (xmlHttpReq.readyState == 4) {
+				if (xmlHttpReq.status == 200) DownloadManager.addJob(href);
+			}
+		}
+		xmlHttpReq.send();
+	}
+	else console.log('error: invalid request:', href);
 };
 
 // Chrome
-
 chrome.contextMenus.create({
 	//	"targetUrlPatterns" : []
 	'title': 'Save Link Using PyAxelWS',

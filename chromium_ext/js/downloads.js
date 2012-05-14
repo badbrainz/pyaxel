@@ -1,18 +1,23 @@
 /* helpers */
 var metercounter = 0;
 
+function createTextNode(value) {
+    value = typeof value !== 'undefined' ? value : '';
+    return document.createTextNode(value);
+}
+
 function createLink(onclick, value) {
     var link = document.createElement('a');
     link.onclick = onclick;
     link.href = '#';
-    link.innerHTML = value;
+    link.appendChild(createTextNode(value));
     return link;
 }
 
 function createElementWithClassName(type, className, content) {
     var elm = document.createElement(type);
     elm.className = className;
-    elm.innerHTML = content || '';
+    elm.appendChild(createTextNode(content));
     return elm;
 }
 
@@ -93,7 +98,7 @@ Display.showResults = function(data) {
 
 Display.update = function(state) {
     var id = state.id;
-    if (!! Display.panels[id]) Display.panels[id].update(state);
+    if (id in Display.panels) Display.panels[id].update(state);
     else Display.panels[id] = new Display.Panel(state);
 };
 
@@ -119,14 +124,14 @@ Display.Panel = function(state) {
     this.statusNode.appendChild(labelsNode);
 
     var status_text = this.getStatusText();
-    this.labels = {
+    var labels = {
         url: createElementWithClassName('div', 'url', state.url),
         status: createElementWithClassName('div', 'status', status_text),
         progress: createElementWithClassName('div', 'progress', state.progress)
     };
-    for (var i in this.labels) {
-        labelsNode.appendChild(this.labels[i]);
-    }
+    for (var i in labels)
+        labelsNode.appendChild(labels[i]);
+    this.labels = labels;
     labelsNode.appendChild(controlsNode);
     var title = createElementWithClassName('div', 'title');
     this.labels.name = createElementWithClassName('div', 'name', state.name);
@@ -139,25 +144,26 @@ Display.Panel = function(state) {
     title.appendChild(this.labels.name);
     labelsNode.insertAdjacentElement('afterBegin', title);
 
-    this.controls = {
+    var controls = {
         pause: createLink(this.pause.bind(this), 'Pause'),
         resume: createLink(this.resume.bind(this), 'Resume'),
+        retry: createLink(this.retry.bind(this), 'Retry'),
         cancel: createLink(this.cancel.bind(this), 'Cancel'),
         remove: createLink(this.remove.bind(this), 'Remove')
     };
-    for (var i in this.controls) {
-        controlsNode.appendChild(this.controls[i]);
-    }
+    for (var i in controls)
+        controlsNode.appendChild(controls[i]);
+    this.controls = controls;
 
-    this.pies = {
+    var pies = {
         background: createElementWithClassName('div', 'background'),
         foreground: createElementWithClassName('div', 'foreground')
     };
+    pies.foreground.style.webkitMask = '-webkit-canvas(canvas_' + state.id + ')';
+    for (var i in pies)
+        this.pieNode.appendChild(pies[i]);
+    this.pies = pies;
     this.showIndicators(false);
-    this.pies.foreground.style.webkitMask = '-webkit-canvas(canvas_' + state.id + ')';
-    for (var i in this.pies) {
-        this.pieNode.appendChild(this.pies[i]);
-    }
 
     this.labels.name.innerHTML = state.url.replace(/^.*\//, '');
     this.labels.progress.innerHTML = '&nbsp;';
@@ -236,6 +242,7 @@ Display.Panel.prototype = {
         // show link controls
         show(this.controls.pause, active && !idle);
         show(this.controls.resume, idle);
+        show(this.controls.retry, inactive);
         show(this.controls.cancel, active || idle);
         show(this.controls.remove, inactive);
     },
@@ -267,6 +274,12 @@ Display.Panel.prototype = {
 
     cancel: function() {
         send('cancel', this.state.id);
+        return false;
+    },
+
+    retry: function() {
+        send('retry', this.state.id);
+        Display.remove(this.state.id);
         return false;
     },
 
@@ -318,10 +331,10 @@ Display.Panel.prototype = {
 /* port connection */
 var port = null;
 
-function send(cmd, args) {
+function send(cmd, arg) {
     port.postMessage({
         cmd: cmd,
-        args: args
+        arg: arg
     });
 }
 
