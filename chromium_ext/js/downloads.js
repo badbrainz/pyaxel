@@ -193,7 +193,8 @@ Display.Panel.prototype = {
 
         var idle = status === DownloadStatus.PAUSED;
         var active = status === DownloadStatus.IN_PROGRESS;
-        var inactive = status === DownloadStatus.QUEUED || status === DownloadStatus.COMPLETE || status === DownloadStatus.CANCELLED;
+        var done = status === DownloadStatus.COMPLETE;
+        var inactive = status === DownloadStatus.QUEUED || status === DownloadStatus.CANCELLED;
 
         if (status === DownloadStatus.INITIALIZING) {
             this.showIndicators(true);
@@ -213,7 +214,7 @@ Display.Panel.prototype = {
             this.canvas.fill();
             this.canvas.closePath();
         }
-        else if (inactive) {
+        else if (inactive || done) {
             this.showIndicators(false);
             this.labels.rate.innerHTML = '';
         }
@@ -242,9 +243,9 @@ Display.Panel.prototype = {
         // show link controls
         show(this.controls.pause, active && !idle);
         show(this.controls.resume, idle);
-        show(this.controls.retry, inactive);
+        show(this.controls.retry, inactive && !done);
         show(this.controls.cancel, active || idle);
-        show(this.controls.remove, inactive);
+        show(this.controls.remove, inactive || done);
     },
 
     adjustDocPosition: function(status) {
@@ -279,7 +280,7 @@ Display.Panel.prototype = {
 
     retry: function() {
         send('retry', this.state.id);
-        Display.remove(this.state.id);
+        //Display.remove(this.state.id);
         return false;
     },
 
