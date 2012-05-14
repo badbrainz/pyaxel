@@ -315,11 +315,9 @@ class ClientSessionState:
         try:
             msg = json.loads(data)
             self.state_manager.execute(msg["cmd"], msg.get("arg"))
-
         except StateManager.TransitionError, e:
             resp = "'%s' command not recognized <State:%s>" % (e.inp, e.cur)
             self.postMessage(compact_msg({"event":BAD_REQUEST,"data":resp}))
-
         except StateManager.FSMError, e:
             self.postMessage(compact_msg({"event":BAD_REQUEST,"data":e}))
         except:
@@ -414,9 +412,7 @@ class ClientSessionState:
         print "Stopping:", self.output_fn
 
         self.inprogress = False
-
         self.closeConnection()
-        self.connection = None
 
         self.state_fn = None
         self.output_fn = None
@@ -428,9 +424,7 @@ class ClientSessionState:
             print "Aborting:", self.output_fn
 
             self.inprogress = False
-
             self.closeConnection()
-            self.connection = None
 
             os.remove(self.output_fp + self.state_fn)
             os.remove(self.output_fp + self.output_fn + ".part")
