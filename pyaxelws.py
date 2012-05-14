@@ -322,11 +322,11 @@ class ClientSessionState:
 
         except StateManager.FSMError, e:
             self.postMessage(compact_msg({"event":BAD_REQUEST,"data":e}))
-
-        except Exception, e:
-            resp = "internal server error (%s)" % e
-            self.postMessage(compact_msg({"event":BAD_REQUEST,"data":resp}))
-            backtrace()
+        except:
+            self.closeConnection()
+            self.state_manager.start('listening')
+            self.postMessage(compact_msg({"event":BAD_REQUEST,"data":
+                "internal server error"}))
 
     def noneAction(self, state, cmd, args):
         pass
@@ -367,6 +367,8 @@ class ClientSessionState:
                     file_name = None
             if file_name == None:
                 file_name = url.rsplit("/", 1)[1]
+            if not file_name:
+                raise
 
         file_name = url2pathname(file_name)
         file_path = os.path.join(path, file_name)
