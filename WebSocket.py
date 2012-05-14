@@ -58,9 +58,7 @@ class Stream(asynchat.async_chat):
 
     def handle_response(self, msg, opcode=0x01):
         header = chr(0x80 | opcode)
-
         # no fragmentation
-
         length = len(msg)
         if length <= 0x7D:
             header += chr(length)
@@ -68,7 +66,6 @@ class Stream(asynchat.async_chat):
             header += struct.pack('>BH', 0x7E, length)
         else:
             header += struct.pack('>BQ', 0x7F, length)
-
         self.push(header + msg)
 
     def handle_request(self):

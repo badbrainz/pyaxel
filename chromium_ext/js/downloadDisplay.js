@@ -41,7 +41,7 @@ function show(elem, show) {
     elem.style.display = show ? 'inline-block' : 'none';
 }
 
-/* Indicators struct */
+/* Indicators */
 var Indicators = {};
 
 Indicators.Pie = {
@@ -61,25 +61,19 @@ Indicators.Bar = {
 
 /* Display */
 var Display = {};
-Display.parent = null;
-Display.activeNode = null;
-Display.queuedNode = null;
-Display.completedNode = null;
-Display.cancelledNode = null;
 Display.panels = {};
 
 Display.init = function() {
-    Display.parent = document.querySelector('#display');
-    Display.activeNode = document.querySelector('#active');
-    Display.queuedNode = document.querySelector('#queued');
-    Display.completedNode = document.querySelector('#completed');
-    Display.cancelledNode = document.querySelector('#cancelled');
+    Display.activeNode = document.getElementById('active');
+    Display.queuedNode = document.getElementById('queued');
+    Display.completedNode = document.getElementById('completed');
+    Display.cancelledNode = document.getElementById('cancelled');
 };
 
 Display.remove = function(id) {
-    Display.parent.removeChild(Display.panels[id].rootNode)
+    var displayNode = document.getElementById('display');
+    displayNode.removeChild(Display.panels[id].rootNode)
     delete Display.panels[id];
-    // update display
 };
 
 Display.clear = function() {
@@ -247,13 +241,21 @@ Display.Panel.prototype = {
     },
 
     adjustDocPosition: function(status) {
-        if (status === DownloadStatus.QUEUED) Display.queuedNode.insertAdjacentElement('afterEnd', this.rootNode);
-
-        else if (status === DownloadStatus.CONNECTING || status === DownloadStatus.INITIALIZING) Display.activeNode.insertAdjacentElement('afterEnd', this.rootNode);
-
-        else if (status === DownloadStatus.COMPLETE) Display.completedNode.insertAdjacentElement('afterEnd', this.rootNode);
-
-        else if (status === DownloadStatus.CANCELLED) Display.cancelledNode.insertAdjacentElement('afterEnd', this.rootNode);
+        switch (status) {
+        case DownloadStatus.QUEUED:
+            Display.queuedNode.insertAdjacentElement('afterEnd', this.rootNode);
+            break;
+        case DownloadStatus.CONNECTING:
+        case DownloadStatus.INITIALIZING:
+            Display.activeNode.insertAdjacentElement('afterEnd', this.rootNode);
+            break;
+        case DownloadStatus.COMPLETE:
+            Display.completedNode.insertAdjacentElement('afterEnd', this.rootNode);
+            break;
+        case DownloadStatus.CANCELLED:
+            Display.cancelledNode.insertAdjacentElement('afterEnd', this.rootNode);
+            break;
+        }
     },
 
     showIndicators: function(show) {
