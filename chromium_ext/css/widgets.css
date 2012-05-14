@@ -76,5 +76,5 @@ input[type="text"]:invalid
 input[type="url"]::-webkit-input-placeholder,
 input[type="text"]::-webkit-input-placeholder
 {
-	color:#789
+	color:darkGray
 }
