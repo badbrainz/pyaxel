@@ -24,7 +24,6 @@ DownloadManager.unassignedCatalog = {};
 DownloadManager.unassignedJobs = new Queue();
 
 DownloadManager.addJob = function(url) {
-    // no copies
     function duplicate(e) { return url === e.url; }
     if (DownloadManager.getUnassignedJobs().some(duplicate) ||
         DownloadManager.getActiveJobs().some(duplicate))
@@ -43,8 +42,10 @@ DownloadManager.prepareJob = function(job) {
     var id = job.id;
     job.status = DownloadStatus.QUEUED;
     DownloadManager.catalog[id] = job;
-    DownloadManager.unassignedCatalog[id] = job;
-    DownloadManager.unassignedJobs.put(job);
+    if (!(id in DownloadManager.unassignedCatalog)) {
+        DownloadManager.unassignedCatalog[id] = job;
+        DownloadManager.unassignedJobs.put(job);
+    }
 
     ConnectionManager.establishConnection();
 };
@@ -62,10 +63,15 @@ DownloadManager.cancelJob = function(id) {
 };
 
 DownloadManager.retryJob = function(id) {
+    // only if queued or cancelled state
     var download = DownloadManager.completedCatalog[id];
-    if (!download)
-        return;
+    if (!download) {
+        download = DownloadManager.unassignedCatalog[id];
+        if (!download)
+            return;
+    }
 
+    // may be in cancelled state
     delete DownloadManager.completedCatalog[id];
 
     DownloadManager.prepareJob(download);
@@ -164,8 +170,5 @@ DownloadManager.updateFullList = function() {
 
 DownloadManager.getFullList = function() {
     return DownloadManager.getAllJobs();
-//    return [].concat(DownloadManager.getCompletedJobs(),
-//                     DownloadManager.getUnassignedJobs(),
-//                     DownloadManager.getActiveJobs());
 };
 
