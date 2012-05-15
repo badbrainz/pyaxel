@@ -48,8 +48,9 @@ class Stream(asynchat.async_chat):
         self.close()
         self.handle_close()
 
-    def disconnect(self):
-        self.handle_response(b"", 0x08)
+    def disconnect(self, reason=""):
+        msg = struct.pack(">H%ds" % len(reason), 1000, reason)
+        self.handle_response(msg, 0x08)
         self.terminate()
 
     def terminate(self):
