@@ -135,9 +135,13 @@ def compact_msg(obj):
     return json.dumps(obj, separators=(',',':'))
 
 def general_configuration(options):
+    if not options:
+        options = get_state_info(PYAXELWS_PATH + "pyaxel.st")
+
     urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
     urllib2.install_opener(urllib2.build_opener(urllib2.HTTPCookieProcessor()))
     socket.setdefaulttimeout(20)
+
     config = Config()
     config.nworkers = 20
     config.pool = ThreadPool(num_workers=config.nworkers)
@@ -147,6 +151,8 @@ def general_configuration(options):
     config.allotted_bandwidth = config.max_bandwidth
     config.host = options.get("host", "127.0.0.1")
     config.port = options.get("port", 8002)
+
+    return config
 
 
 class Config(object):
@@ -690,17 +696,10 @@ class ClientSession():
 
 
 class WebSocketServer(asyncore.dispatcher):
-    def __init__(self):
+    def __init__(self, config):
         asyncore.dispatcher.__init__(self)
         self.clients = []
-        self.config = Config()
-        state_info = get_state_info(pyapath + "pyaxel.st")
-        if len(state_info) > 0:
-            self.setMaxBandwidth(state_info.get("bandwidth",
-                                 self.config.max_bandwidth))
-            self.setDownloadPath(state_info.get("path",
-                                 self.config.download_path))
-            self.setMaxSplits(state_info.get("splits", self.config.max_splits))
+        self.conf = config
 
     def handle_accept(self):
         try:
@@ -777,7 +776,7 @@ class WebSocketServer(asyncore.dispatcher):
         #asyncore.close_all()
 
 
-def run(options={}):
+def run(options=None):
     if sys.platform.startswith('win'):
         print 'aborting: unsupported platform:', sys.platform
         return
@@ -788,10 +787,9 @@ def run(options={}):
             (major, minor, micro)
         return
 
-    general_configuration(options)
-    config = Config()
+    config = general_configuration(options)
     endpoint = (config.host, config.port)
-    server = WebSocketServer()
+    server = WebSocketServer(config)
 
     try:
         server.startService(endpoint)
