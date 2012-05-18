@@ -173,16 +173,14 @@ class Connection:
             self.progress = progress
 
 
-    def __init__(self, output_fn, url, fsize, pickle={}):
+    def __init__(self, output_fn, url, fsize, splits, pickle={}):
         self.url = url
         self.sleep_timer = 0.0
         self.need_to_quit = False
         self.output_fn = output_fn
         self.elapsed_time = pickle.get("elapsed_time", 1.0)
 
-        config = Config()
-
-        chunk_count = config.max_splits
+        chunk_count = splits
         if fsize <= 1024 * 1024: chunk_count = 1
 
         chunk_count = pickle.get("chunk_count", chunk_count)
@@ -208,9 +206,6 @@ class Connection:
         self.chunks = chunks
 
         self.start_time = time.time()
-        addJob = config.pool.addJob
-        callback = self.retrieve
-        for s in states: addJob(JobRequest(callback, [s]))
 
     def retrieve(self, state):
         name = threading.currentThread().getName()
@@ -392,6 +387,11 @@ class ClientSessionState:
         #self.delay =  1e6 / (self.session.getMaxSpeed() * segments)
         connection = Connection(file_path + ".part", url, file_size,
                                 state_info)
+
+        addJob = self.conf.pool.addJob
+        callback = connection.retrieve
+        request = threadpool.JobRequest
+        for s in connection.download_states: addJob(request(callback, [s]))
 
         snapshot = connection.getSnapshot()
 
