@@ -4,20 +4,21 @@ import os, sys, time, math, cPickle, json, traceback
 import base64, hashlib, struct, array
 import threading, urllib2, socket, asyncore, asynchat
 
-from ThreadPool import ThreadPool, JobRequest
 from optparse import OptionParser
 from urllib import url2pathname
 
-import StateManager
+import statemachine
+import threadpool
 
-pyapath = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
+PYAXELWS_PATH = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
+PYAXELWS_VERSION = "1.1.0"
 
 (ACK, OK, INVALID, BAD_REQUEST, ERROR, PROC, END, INCOMPLETE, STOPPED,
  UNDEFINED, INITIALIZING) = range(11)
 
 (IDENT, START, STOP, ABORT, QUIT) = range(5)
 
-std_headers = {
+STD_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) \
         Gecko/20100115 Firefox/3.6",
     "Accept-Charset": "ISO-8859-1,utf-8;q=0.7,*;q=0.7",
@@ -27,7 +28,7 @@ std_headers = {
 }
 
 ## {{{ http://code.activestate.com/recipes/52215/ (r1)
-def backtrace():
+def backtrace(debug_locals=True):
     tb = sys.exc_info()[2]
     while 1:
         if not tb.tb_next:
@@ -46,12 +47,13 @@ def backtrace():
         print "Frame %s in %s at line %s" % (frame.f_code.co_name,
                                              frame.f_code.co_filename,
                                              frame.f_lineno)
-        for key, value in frame.f_locals.items():
-            print "\t%20s = " % key,
-            try:
-                print value
-            except:
-                print "<ERROR WHILE PRINTING VALUE>"
+        if debug_locals:
+            for key, value in frame.f_locals.items():
+                print "\t%20s = " % key,
+                try:
+                    print value
+                except:
+                    print "<ERROR WHILE PRINTING VALUE>"
 ## end of http://code.activestate.com/recipes/52215/ }}}
 
 def get_file_size(url):
@@ -59,7 +61,7 @@ def get_file_size(url):
     content_length = 0
     while retries < 5:
         try:
-            request = urllib2.Request(url, None, std_headers)
+            request = urllib2.Request(url, None, STD_HEADERS)
             data = urllib2.urlopen(request)
             content_length = int(data.info()["Content-Length"])
         except:
@@ -68,27 +70,12 @@ def get_file_size(url):
             break
     return content_length
 
-def parse_header(line):
-    plist = [x.strip() for x in line.split(';')]
-    key = plist.pop(0).lower()
-    pdict = {}
-    for p in plist:
-        i = p.find('=')
-        if i >= 0:
-            name = p[:i].strip().lower()
-            value = p[i+1:].strip()
-            if len(value) >= 2 and value[0] == value[-1] == '"':
-                value = value[1:-1]
-                value = value.replace('\\\\', '\\').replace('\\"', '"')
-            pdict[name] = value
-    return key, pdict
-
 def get_file_info(url):
     retries = 0
     info = {}
     while retries < 1:
         try:
-            request = urllib2.Request(url, None, std_headers)
+            request = urllib2.Request(url, None, STD_HEADERS)
             data = urllib2.urlopen(request)
             header = data.info()
             info["type"] = header.get("Content-Type")
@@ -131,6 +118,21 @@ def bytes_to_str(num, prefix=True):
     except TypeError:
         return "0"
 
+def parse_header(line):
+    plist = [x.strip() for x in line.split(';')]
+    key = plist.pop(0).lower()
+    pdict = {}
+    for p in plist:
+        i = p.find('=')
+        if i >= 0:
+            name = p[:i].strip().lower()
+            value = p[i+1:].strip()
+            if len(value) >= 2 and value[0] == value[-1] == '"':
+                value = value[1:-1]
+                value = value.replace('\\\\', '\\').replace('\\"', '"')
+            pdict[name] = value
+    return key, pdict
+
 def compact_msg(obj):
     return json.dumps(obj, separators=(',',':'))
 
@@ -138,21 +140,21 @@ def general_configuration(options):
     if not options:
         options = get_state_info(PYAXELWS_PATH + "pyaxel.st")
 
+    conf = Config()
+    conf.nworkers = 20
+    conf.pool = threadpool.ThreadPool(num_workers=conf.nworkers)
+    conf.download_path = options.get("output_dir", PYAXELWS_PATH)
+    conf.max_splits = options.get("num_connections", 4)
+    conf.max_bandwidth = options.get("max_speed", 0)
+    conf.distr_bandwidth = conf.max_bandwidth
+    conf.host = options.get("host", "127.0.0.1")
+    conf.port_num = options.get("port", 8002)
+
     urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
     urllib2.install_opener(urllib2.build_opener(urllib2.HTTPCookieProcessor()))
     socket.setdefaulttimeout(20)
 
-    config = Config()
-    config.nworkers = 20
-    config.pool = ThreadPool(num_workers=config.nworkers)
-    config.download_path = options.get("output_dir", pyapath)
-    config.max_splits = options.get("num_connections", 4)
-    config.max_bandwidth = options.get("max_speed", 0)
-    config.allotted_bandwidth = config.max_bandwidth
-    config.host = options.get("host", "127.0.0.1")
-    config.port = options.get("port", 8002)
-
-    return config
+    return conf
 
 
 class Config(object):
@@ -209,9 +211,9 @@ class Connection:
 
     def retrieve(self, state):
         name = threading.currentThread().getName()
-        request = urllib2.Request(self.url, None, std_headers)
-        request.add_header("Range", "bytes=%d-%d" % (state.offset, state.offset
-                                                     + state.length))
+        request = urllib2.Request(self.url, None, STD_HEADERS)
+        request.add_header("Range", "bytes=%d-%d" % (state.offset,
+            state.offset + state.length))
 
         while 1:
             try:
@@ -257,11 +259,11 @@ class Connection:
         state.done = True
         return True
 
-    def isComplete(self):
+    def is_complete(self):
         states = self.download_states
         return len(self.download_states) >= 0 and all(s.done for s in states)
 
-    def getSnapshot(self):
+    def get_snapshot(self):
         states = self.download_states
         snapshot = {
             "elapsed_time": self.elapsed_time,
@@ -273,7 +275,7 @@ class Connection:
         }
         return snapshot
 
-    def getStatus(self):
+    def get_status(self):
         states = self.download_states
         return [y.progress for y in states]
 
@@ -289,61 +291,68 @@ class Connection:
         self.need_to_quit = True
 
 
-class ClientSessionState:
-    def __init__(self, session):
+class ChannelState:
+    def __init__(self, channel):
         self.state_fn = None
         self.output_fn = None
         self.output_fp = None
         self.connection = None
         self.inprogress = False
-        self.session = session
+        self.channel = channel
         self.delay = 0.0
 
-        manager = StateManager.StateManager()
-        manager.add("identity", IDENT, "listening", self.identAction)
-        manager.add("listening", START, "downloading", self.startAction)
-        manager.add("downloading", ABORT, "listening", self.abortAction)
-        manager.add("downloading", STOP, "listening", self.stopAction)
-        manager.add("downloading", QUIT, "listening", self.quitAction)
+        manager = statemachine.State()
+        manager.add("initial", IDENT, "listening", self.identAction)
+        manager.add("listening", START, "established", self.startAction)
         manager.add("listening", ABORT, "listening", self.abortAction)
         manager.add("listening", QUIT, "listening", self.quitAction)
-        manager.start("identity")
+        manager.add("established", STOP, "listening", self.stopAction)
+        manager.add("established", ABORT, "listening", self.abortAction)
+        manager.add("established", QUIT, "listening", self.quitAction)
+        manager.start("initial")
         self.state_manager = manager
 
-        self.config = Config()
+        self.conf = Config()
 
     def execute(self, data):
         try:
             msg = json.loads(data)
             self.state_manager.execute(msg["cmd"], msg.get("arg"))
-        except StateManager.TransitionError, e:
+        except statemachine.TransitionError, e:
             resp = "'%s' command not recognized <State:%s>" % (e.inp, e.cur)
-            self.postMessage(compact_msg({"event":BAD_REQUEST,"data":resp}))
-        except StateManager.FSMError, e:
-            self.postMessage(compact_msg({"event":BAD_REQUEST,"data":e}))
+            self.post_message(compact_msg({"event":BAD_REQUEST,"data":resp}))
+        except statemachine.FSMError, e:
+            self.post_message(compact_msg({"event":BAD_REQUEST,"data":e}))
         except:
-            self.closeConnection()
+            self.close_connection()
             self.state_manager.start('listening')
-            self.postMessage(compact_msg({"event":BAD_REQUEST,"data":
+            self.post_message(compact_msg({"event":BAD_REQUEST,"data":
                 "internal server error"}))
 
-    def noneAction(self, state, cmd, args):
-        pass
-
     def identAction(self, state, cmd, args):
-        conn_type = args.get("type")
+        conn_type = args["type"]
 
         if conn_type == "ECHO":
-            self.postMessage(compact_msg({"event":OK,"data":args.get("msg")}))
-            self.session.end()
-        elif conn_type in ["MGR","WKR"]:
+            self.post_message(compact_msg({"event":OK,"data":args.get("msg")}))
+            self.channel.end()
+        elif conn_type in ["MGR", "WKR"]:
+            msg = {"event":ACK}
             if conn_type == "MGR":
-                self.session.server.savePreferences(args.get("bw"),
-                    args.get("dlpath"), args.get("splits"))
-            self.postMessage(compact_msg({"event":ACK}))
+                if "pref" in args:
+                    # TODO fix this
+                    self.channel.server.save_preferences(args["pref"])
+                if "info" in args:
+                    info = args["info"]
+                    for i in xrange(len(info)):
+                        if "version" == info[i]:
+                            msg["version"] = PYAXELWS_VERSION
+                self.state_manager.start("initial")
+            else:
+                pass
+            self.post_message(compact_msg(msg))
 
     def startAction(self, state, cmd, args):
-        self.postMessage(compact_msg({"event":INITIALIZING}))
+        self.post_message(compact_msg({"event":INITIALIZING}))
 
         time.sleep(1.50)
 
@@ -353,7 +362,7 @@ class ClientSessionState:
         if len(file_info) == 0: # TODO fix this
             raise Exception("Couldn't get file info <%s>" % url2pathname(url))
 
-        path = self.config.download_path
+        path = self.conf.download_path
 
         file_name = args.get("name")
         if file_name == None:
@@ -384,16 +393,16 @@ class ClientSessionState:
         output_fd = os.open(file_path + ".part", os.O_CREAT | os.O_WRONLY)
         os.close(output_fd)
 
-        #self.delay =  1e6 / (self.session.getMaxSpeed() * segments)
+        #self.delay =  1e6 / (self.channel.getMaxSpeed() * segments)
         connection = Connection(file_path + ".part", url, file_size,
-                                state_info)
+                                self.conf.max_splits, state_info)
 
         addJob = self.conf.pool.addJob
         callback = connection.retrieve
         request = threadpool.JobRequest
         for s in connection.download_states: addJob(request(callback, [s]))
 
-        snapshot = connection.getSnapshot()
+        snapshot = connection.get_snapshot()
 
         msg = {
             "event": OK,
@@ -412,25 +421,25 @@ class ClientSessionState:
 
         self.inprogress = True
 
-        self.postMessage(compact_msg(msg))
+        self.post_message(compact_msg(msg))
 
     def stopAction(self, state, cmd, args):
         print "Stopping:", self.output_fn
 
         self.inprogress = False
-        self.closeConnection()
+        self.close_connection()
 
         self.state_fn = None
         self.output_fn = None
 
-        self.postMessage(compact_msg({"event":STOPPED}))
+        self.post_message(compact_msg({"event":STOPPED}))
 
     def abortAction(self, state, cmd, args):
         if self.connection != None:
             print "Aborting:", self.output_fn
 
             self.inprogress = False
-            self.closeConnection()
+            self.close_connection()
 
             os.remove(self.output_fp + self.state_fn)
             os.remove(self.output_fp + self.output_fn + ".part")
@@ -439,10 +448,10 @@ class ClientSessionState:
             self.output_fp = None
             self.output_fn = None
 
-        self.postMessage(compact_msg({"event":INCOMPLETE}))
+        self.post_message(compact_msg({"event":INCOMPLETE}))
 
     def quitAction(self, state, cmd, args):
-        self.session.end()
+        self.channel.end()
 
     def update(self):
         if self.inprogress == False: return
@@ -450,12 +459,12 @@ class ClientSessionState:
         connection = self.connection
         connection.update()
 
-        snapshot = connection.getSnapshot()
-        status = connection.getStatus()
+        snapshot = connection.get_snapshot()
+        status = connection.get_status()
 
         downloaded = sum(status)
         avg_speed = downloaded / connection.elapsed_time
-        max_speed = self.config.allotted_bandwidth
+        max_speed = self.conf.distr_bandwidth
         if max_speed > 0:
             theta = avg_speed / max_speed
             if theta > 1.05: self.delay += 0.01
@@ -465,12 +474,15 @@ class ClientSessionState:
 
         save_state_info(self.output_fp + self.state_fn, snapshot)
 
-        self.session.send_message(compact_msg({"event":PROC,"data":{
-                                              "prog":status,
-                                              "rate":bytes_to_str(avg_speed)}
-                                              }))
+        self.channel.send_message(compact_msg({
+            "event": PROC,
+            "data": {
+                "prog": status,
+                "rate": bytes_to_str(avg_speed)
+            }
+        }))
 
-        if connection.isComplete():
+        if connection.is_complete():
             fpath = self.output_fp
             fname = self.output_fn
             sname = self.state_fn
@@ -481,18 +493,18 @@ class ClientSessionState:
 
             self.inprogress = False
             self.state_manager.start('listening')
-            self.session.send_message(compact_msg({"event":END}))
+            self.channel.send_message(compact_msg({"event":END}))
 
-    def postMessage(self, msg):
-        self.session.send_message(msg)
+    def post_message(self, msg):
+        self.channel.send_message(msg)
 
-    def closeConnection(self):
+    def close_connection(self):
         if self.connection != None:
             self.connection.destroy()
             self.connection = None
 
 
-class WebSocket(asynchat.async_chat):
+class ChatChannel(asynchat.async_chat):
     """this implements version 13 of the WebSocket protocol,
     <http://tools.ietf.org/html/rfc6455>
     """
@@ -665,25 +677,25 @@ class WebSocket(asynchat.async_chat):
         return data
 
 
-class ClientSession():
-    def __init__(self, sock, server):
-        self.server = server
-        self.state = ClientSessionState(self)
-        self.stream = WebSocket(sock, self)
+class ChannelDispatcher():
+    def __init__(self, sock, channel):
+        self.channel = channel
+        self.state = ChannelState(self)
+        self.channel = ChatChannel(sock, self)
 
     def update(self):
-        if self.stream.handshaken:
+        if self.channel.handshaken:
            self.state.update()
 
     def send_message(self, msg):
-        self.stream.handle_response(msg)
+        self.channel.handle_response(msg)
 
     def message_recieved(self, msg):
         self.state.execute(msg)
 
     def socket_closed(self):
-        self.state.closeConnection()
-        self.server.removeClient(self)
+        self.state.close_connection()
+        self.channel.remove_client(self)
 
     def socket_error(self):
         try:
@@ -692,69 +704,67 @@ class ClientSession():
             pass
 
     def end(self, status=1000, reason=""):
-        self.stream.disconnect(status, reason)
+        self.channel.disconnect(status, reason)
 
 
-class WebSocketServer(asyncore.dispatcher):
-    def __init__(self, config):
+class WebSocketChannel(asyncore.dispatcher):
+    def __init__(self, conf):
         asyncore.dispatcher.__init__(self)
-        self.clients = []
-        self.conf = config
+        self.dispatchers = []
+        self.conf = conf
 
     def handle_accept(self):
         try:
-            sock, endpoint = self.accept()
-        except TypeError:
-            return
+            conn, addr = self.accept()
+            if addr == None:
+                return
         except socket.error, err:
             #if err.args[0] != errno.ECONNABORTED:
             #    raise
-            return
+            pass
         else:
-            if endpoint == None:
-                return
-            self.log("incoming connection from %s" % repr(endpoint))
-            self.clients.append(ClientSession(sock, self))
-            self.adjustBandwidthSetting()
+            self.log("incoming connection from %s" % repr(addr))
+            self.dispatchers.append(ChannelDispatcher(conn, self))
+            self.adjust_bandwith()
 
     def refresh(self):
-        for c in self.clients: c.update()
-        for _ in self.config.pool.iterProcessedJobs(timeout=0): pass
+        for c in self.dispatchers: c.update()
+        for _ in self.conf.pool.iterProcessedJobs(timeout=0): pass
 
-    def savePreferences(self, bandwidth, path, splits):
+    def save_preferences(self, prefs):
         state_info = {
-            "bandwidth": bandwidth,
-            "splits": splits,
-            "path": path
+            "bandwidth": prefs.get("bw"),
+            "splits": prefs.get("splits"),
+            "path": prefs.get("dlpath")
         }
-        save_state_info(pyapath + "pyaxel.st", state_info)
-        self.setMaxBandwidth(bandwidth)
-        self.setDownloadPath(path)
-        self.setMaxSplits(splits)
+        save_state_info(PYAXELWS_PATH + "pyaxel.st", state_info)
+        self.set_max_bandwidth(state_info["bandwidth"])
+        self.set_download_path(state_info["path"])
+        self.set_max_splits(state_info["splits"])
 
-    def setMaxBandwidth(self, bandwidth):
-        self.config.max_bandwidth = bandwidth
-        self.adjustBandwidthSetting()
+    def set_max_bandwidth(self, bandwidth):
+        self.conf.max_bandwidth = bandwidth
+        self.adjust_bandwith()
 
-    def setDownloadPath(self, path):
+    def set_download_path(self, path):
         if os.path.exists(path):
-            self.config.download_path = path
+            self.conf.download_path = path
 
-    def setMaxSplits(self, count):
-        self.config.max_splits = count
+    def set_max_splits(self, count):
+        self.conf.max_splits = count
 
-    def adjustBandwidthSetting(self):
-        bandwidth = self.config.max_bandwidth * 1024
+    def adjust_bandwith(self):
+        bandwidth = self.conf.max_bandwidth * 1024
         try:
-            self.config.allotted_bandwidth = int(bandwidth / len(self.clients))
+            self.conf.distr_bandwidth = int(bandwidth / len(self.dispatchers))
         except:
-            self.config.allotted_bandwidth = int(bandwidth)
+            self.conf.distr_bandwidth = int(bandwidth)
 
-    def removeClient(self, client):
-        self.clients.remove(client)
-        self.adjustBandwidthSetting()
+    def remove_client(self, client):
+        self.dispatchers.remove(client)
+        self.adjust_bandwith()
 
-    def startService(self, endpoint=("", 8118), backlog=5):
+    def start_service(self, endpoint=("", 8118), backlog=5):
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.set_reuse_addr()
         self.bind(endpoint)
@@ -768,10 +778,10 @@ class WebSocketServer(asyncore.dispatcher):
             refresh()
             flush()
 
-    def stopService(self):
+    def stop_service(self):
         sys.stdout.write('\n')
         self.log("stopping service")
-        for c in self.clients: c.end()
+        for c in self.dispatchers: c.end(status=1001, reason="server shutdown")
         asyncore.socket_map.clear()
         #asyncore.close_all()
 
@@ -787,24 +797,24 @@ def run(options=None):
             (major, minor, micro)
         return
 
-    config = general_configuration(options)
-    endpoint = (config.host, config.port)
-    server = WebSocketServer(config)
+    conf = general_configuration(options)
+    endpoint = (conf.host, conf.port_num)
+    port = WebSocketChannel(conf)
 
     try:
-        server.startService(endpoint)
+        port.start_service(endpoint)
     except socket.error, e:
-        (errno, strerror) = e
-        print "error:", endpoint, strerror
-        server.stopService()
+#        (errno, strerror) = e
+#        print "error:", endpoint, strerror
+        port.stop_service()
         return
     except:
         pass
 
-    pool = config.pool
+    pool = conf.pool
     pool.cancelAllJobs()
-    pool.dismissWorkers(config.nworkers)
-    server.stopService()
+    pool.dismissWorkers(conf.nworkers)
+    port.stop_service()
     sys.stdout.flush()
 
 
@@ -830,7 +840,7 @@ if __name__ == "__main__":
                       " connections here. Default port number is 8002.",
                       metavar="PORT")
     parser.add_option("-d", "--directory", dest="output_dir",
-                      type="str", default=pyapath,
+                      type="str", default=PYAXELWS_PATH,
                       help="By default, files are saved to current working"
                       " directory. Use this option to change where the saved"
                       "files should go.",

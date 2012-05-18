@@ -41,8 +41,6 @@ class StateManager:
                     self.state = restartto
                     return
             self.state = newstate
-            return
-
         else:
             if None in state:
                 newstate, action = state[None]
@@ -53,8 +51,6 @@ class StateManager:
                         self.state = restartto
                         return
                 self.state = newstate
-                return
-
             else:
                 raise TransitionError(self.state, input)
 
