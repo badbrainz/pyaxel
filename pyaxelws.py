@@ -679,7 +679,7 @@ class ChatChannel(asynchat.async_chat):
 
 class ChannelDispatcher():
     def __init__(self, sock, channel):
-        self.channel = channel
+        self.server = channel
         self.state = ChannelState(self)
         self.channel = ChatChannel(sock, self)
 
@@ -695,7 +695,7 @@ class ChannelDispatcher():
 
     def socket_closed(self):
         self.state.close_connection()
-        self.channel.remove_client(self)
+        self.server.remove_client(self)
 
     def socket_error(self):
         try:
