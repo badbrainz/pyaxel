@@ -14,7 +14,7 @@ class TransitionError(FSMError):
 class RestartError(FSMError):
     pass
 
-class State:
+class StateMachine:
     def __init__(self):
         self.states = {}
         self.state = None
