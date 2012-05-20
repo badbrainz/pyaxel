@@ -512,6 +512,8 @@ class ChannelState:
         }))
 
         if connection.is_complete():
+            self.close_connection()
+
             fpath = self.output_fp
             fname = self.output_fn
             sname = self.state_fn
@@ -570,7 +572,6 @@ class ChatChannel(asynchat.async_chat):
         required = ("Host", "Upgrade", "Connection", "Sec-WebSocket-Key",
                     "Sec-WebSocket-Version")
         if not all(map(lambda f: f in fields, required)):
-            print fields
             self.log_info("malformed request:\n%s" % data, "error")
             self.handle_error()
             return
