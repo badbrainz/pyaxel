@@ -142,6 +142,14 @@ def parse_header(line):
 def compact_msg(obj):
     return json.dumps(obj, separators=(',',':'))
 
+def adjust_bandwith(conns):
+    conf = Config()
+    bandwidth = conf.max_speed * 1024
+    try:
+        conf.distr_bandwidth = int(bandwidth / conns)
+    except:
+        conf.distr_bandwidth = int(bandwidth)
+
 def general_configuration(options={}):
     pickle = get_state_info(PYAXELWS_PATH + PYAXELWS_SETTINGS)
     options = dict(options.items() + pickle.items())
@@ -346,7 +354,19 @@ class ChannelState:
             if conn_type == "MGR":
                 if "pref" in args:
                     # TODO fix this
-                    self.channel.server.save_preferences(args["pref"])
+                    pref = args["pref"]
+                    state = {
+                        "max_speed": pref.get("speed", PYAXELWS_SPEED),
+                        "num_connections": pref.get("splits", PYAXELWS_SPLITS),
+                        "download_path": pref.get("dlpath", PYAXELWS_DLPATH)
+                    }
+                    save_state_info(PYAXELWS_PATH + PYAXELWS_SETTINGS, state)
+                    conf = Config()
+                    if os.path.exists(state["download_path"]):
+                        conf.download_path = state["download_path"]
+                    conf.max_speed = state["max_speed"]
+                    conf.num_connections = state["num_connections"]
+                    adjust_bandwith(self.channel.server.get_client_count() - 1)
                 if "info" in args:
                     info = args["info"]
                     for i in xrange(len(info)):
@@ -361,6 +381,8 @@ class ChannelState:
         self.post_message(compact_msg({"event":INITIALIZING}))
 
         time.sleep(1.50)
+
+        adjust_bandwith(self.channel.server.get_client_count())
 
         url = args.get("url")
         file_info = get_file_info(url)
@@ -468,6 +490,7 @@ class ChannelState:
         snapshot = connection.get_snapshot()
         status = connection.get_status()
 
+        # TODO improve this
         downloaded = sum(status)
         avg_speed = downloaded / connection.elapsed_time
         max_speed = self.conf.distr_bandwidth
@@ -508,6 +531,7 @@ class ChannelState:
         if self.connection != None:
             self.connection.destroy()
             self.connection = None
+        adjust_bandwith(self.channel.server.get_client_count() - 1)
 
 
 class ChatChannel(asynchat.async_chat):
@@ -665,8 +689,9 @@ class ChatChannel(asynchat.async_chat):
     def disconnect(self, status, reason):
         msg = struct.pack(">H%ds" % len(reason), status, reason)
         self.handle_response(msg, 0x08)
-        self.close()
-        self._cleanup()
+        self.handle_close()
+        #self.close()
+        #self._cleanup()
 
     def _cleanup(self):
         del self.app_data[:]
@@ -731,44 +756,16 @@ class WebSocketChannel(asyncore.dispatcher):
         else:
             self.log("incoming connection from %s" % repr(addr))
             self.dispatchers.append(ChannelDispatcher(conn, self))
-            self.adjust_bandwith()
 
     def refresh(self):
         for c in self.dispatchers: c.update()
         for _ in self.conf.pool.iterProcessedJobs(timeout=0): pass
 
-    def save_preferences(self, prefs):
-        state_info = {
-            "bandwidth": prefs.get("bw"),
-            "splits": prefs.get("splits"),
-            "path": prefs.get("dlpath")
-        }
-        save_state_info(PYAXELWS_PATH + "pyaxel.st", state_info)
-        self.set_max_bandwidth(state_info["bandwidth"])
-        self.set_download_path(state_info["path"])
-        self.set_max_splits(state_info["splits"])
-
-    def set_max_bandwidth(self, bandwidth):
-        self.conf.max_bandwidth = bandwidth
-        self.adjust_bandwith()
-
-    def set_download_path(self, path):
-        if os.path.exists(path):
-            self.conf.download_path = path
-
-    def set_max_splits(self, count):
-        self.conf.max_splits = count
-
-    def adjust_bandwith(self):
-        bandwidth = self.conf.max_bandwidth * 1024
-        try:
-            self.conf.distr_bandwidth = int(bandwidth / len(self.dispatchers))
-        except:
-            self.conf.distr_bandwidth = int(bandwidth)
+    def get_client_count(self):
+        return len(self.dispatchers)
 
     def remove_client(self, client):
         self.dispatchers.remove(client)
-        self.adjust_bandwith()
 
     def start_service(self, endpoint, backlog=5):
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
