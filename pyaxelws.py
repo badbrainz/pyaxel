@@ -157,7 +157,7 @@ def general_configuration(options={}):
     conf = Config()
     conf.nworkers = 20
     conf.pool = threadpool.ThreadPool(num_workers=conf.nworkers)
-    conf.download_path = options.get("output_dir", PYAXELWS_PATH)
+    conf.download_path = options.get("download_path", PYAXELWS_PATH)
     conf.num_connections = options.get("num_connections", PYAXELWS_SPLITS)
     conf.max_speed = options.get("max_speed", PYAXELWS_SPEED)
     conf.distr_bandwidth = conf.max_speed * 1024
@@ -226,14 +226,17 @@ class Connection:
     def retrieve(self, state):
         name = threading.currentThread().getName()
         request = urllib2.Request(self.url, None, STD_HEADERS)
+        if state.length == 0:
+            return
         request.add_header("Range", "bytes=%d-%d" % (state.offset,
-            state.offset + state.length))
+                                                     state.offset + \
+                                                     state.length))
 
         while 1:
             try:
                 data = urllib2.urlopen(request)
             except urllib2.URLError, u:
-                pass
+                print "Connection", name, " did not start with", u
             else:
                 break
 
@@ -256,11 +259,12 @@ class Connection:
             try:
                 data_block = data.read(fetch_size)
                 if len(data_block) != fetch_size:
-                    print "Connection %s: bad read size" % name
+                    print "Connection %s: len(data_block) != fetch_size" + \
+                        ", but continuing anyway." % name
                     os.close(output)
                     return self.retrieve(state)
             except socket.timeout, s:
-                print "Connection", name, "timed out with. Retrying..."
+                print "Connection", name, "timed out with", s
                 os.close(output)
                 return self.retrieve(state)
 
@@ -315,7 +319,7 @@ class ChannelState:
         self.channel = channel
         self.delay = 0.0
 
-        manager = statemachine.State()
+        manager = statemachine.StateMachine()
         manager.add("initial", IDENT, "listening", self.identAction)
         manager.add("listening", START, "established", self.startAction)
         manager.add("listening", ABORT, "listening", self.abortAction)
@@ -411,7 +415,7 @@ class ChannelState:
         file_type = file_info.get("type")
         file_size = file_info.get("size", 0)
 
-        print "Downloading:", file_name
+        print "Downloading:", url
         print "Location:", path
         print "Size:", bytes_to_str(file_size)
 
@@ -464,7 +468,7 @@ class ChannelState:
 
     def abortAction(self, state, cmd, args):
         if self.connection != None:
-            print "Aborting:", self.output_fn
+            print "Aborting:", self.connection.url
 
             self.inprogress = False
             self.close_connection()
@@ -533,6 +537,7 @@ class ChannelState:
         if self.connection != None:
             self.connection.destroy()
             self.connection = None
+
         adjust_bandwith(self.channel.server.get_client_count() - 1)
 
 
@@ -808,8 +813,8 @@ def run(options={}):
     try:
         port.start_service(endpoint)
     except socket.error, e:
-#        (errno, strerror) = e
-#        print "error:", endpoint, strerror
+        #(errno, strerror) = e
+        #print "error:", endpoint, strerror
         port.stop_service()
         return
     except:
