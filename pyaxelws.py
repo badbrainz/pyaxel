@@ -12,6 +12,12 @@ import threadpool
 
 PYAXELWS_PATH = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
 PYAXELWS_VERSION = "1.1.0"
+PYAXELWS_SETTINGS = "pyaxel.st"
+PYAXELWS_DLPATH = PYAXELWS_PATH
+PYAXELWS_HOST = "127.0.0.1"
+PYAXELWS_PORT = 8002
+PYAXELWS_SPLITS = 4
+PYAXELWS_SPEED = 0
 
 (ACK, OK, INVALID, BAD_REQUEST, ERROR, PROC, END, INCOMPLETE, STOPPED,
  UNDEFINED, INITIALIZING) = range(11)
@@ -136,19 +142,19 @@ def parse_header(line):
 def compact_msg(obj):
     return json.dumps(obj, separators=(',',':'))
 
-def general_configuration(options):
-    if not options:
-        options = get_state_info(PYAXELWS_PATH + "pyaxel.st")
+def general_configuration(options={}):
+    pickle = get_state_info(PYAXELWS_PATH + PYAXELWS_SETTINGS)
+    options = dict(options.items() + pickle.items())
 
     conf = Config()
     conf.nworkers = 20
     conf.pool = threadpool.ThreadPool(num_workers=conf.nworkers)
     conf.download_path = options.get("output_dir", PYAXELWS_PATH)
-    conf.max_splits = options.get("num_connections", 4)
-    conf.max_bandwidth = options.get("max_speed", 0)
-    conf.distr_bandwidth = conf.max_bandwidth
-    conf.host = options.get("host", "127.0.0.1")
-    conf.port_num = options.get("port", 8002)
+    conf.num_connections = options.get("num_connections", PYAXELWS_SPLITS)
+    conf.max_speed = options.get("max_speed", PYAXELWS_SPEED)
+    conf.distr_bandwidth = conf.max_speed * 1024
+    conf.host = options.get("host", PYAXELWS_HOST)
+    conf.port = options.get("port", PYAXELWS_PORT)
 
     urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
     urllib2.install_opener(urllib2.build_opener(urllib2.HTTPCookieProcessor()))
@@ -395,7 +401,7 @@ class ChannelState:
 
         #self.delay =  1e6 / (self.channel.getMaxSpeed() * segments)
         connection = Connection(file_path + ".part", url, file_size,
-                                self.conf.max_splits, state_info)
+                                self.conf.num_connections, state_info)
 
         addJob = self.conf.pool.addJob
         callback = connection.retrieve
@@ -764,7 +770,7 @@ class WebSocketChannel(asyncore.dispatcher):
         self.dispatchers.remove(client)
         self.adjust_bandwith()
 
-    def start_service(self, endpoint=("", 8118), backlog=5):
+    def start_service(self, endpoint, backlog=5):
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.set_reuse_addr()
         self.bind(endpoint)
@@ -786,7 +792,7 @@ class WebSocketChannel(asyncore.dispatcher):
         #asyncore.close_all()
 
 
-def run(options=None):
+def run(options={}):
     if sys.platform.startswith('win'):
         print 'aborting: unsupported platform:', sys.platform
         return
@@ -798,7 +804,7 @@ def run(options=None):
         return
 
     conf = general_configuration(options)
-    endpoint = (conf.host, conf.port_num)
+    endpoint = (conf.host, conf.port)
     port = WebSocketChannel(conf)
 
     try:
@@ -820,30 +826,35 @@ def run(options=None):
 
 if __name__ == "__main__":
     usage="Usage: %prog [options]"
-    description="Note: options will be overridden by those that exist in the \
-        (pyaxel.st) file."
+    description="Note: options will be overridden by those that exist in the" \
+        " %s file." % PYAXELWS_SETTINGS
     parser = OptionParser(usage=usage, description=description)
     parser.add_option("-s", "--max-speed", dest="max_speed",
-                      type="int", default=0,
+                      type="int", default=PYAXELWS_SPEED,
                       help="Specifies maximum speed (Kbytes per second)."
                       " Useful if you don't want the program to suck up"
                       " all of your bandwidth",
                       metavar="SPEED")
     parser.add_option("-n", "--num-connections", dest="num_connections",
-                      type="int", default=4,
-                      help="You can specify an alternative number of"
-                      " connections per download here.",
+                      type="int", default=PYAXELWS_SPLITS,
+                      help="You can specify the number of connections per"
+                      " download here. The default is %d." % PYAXELWS_SPLITS,
                       metavar="NUM")
+    parser.add_option("-a", "--host", dest="host",
+                      type="str", default=PYAXELWS_HOST,
+                      help="You can specify the address of the network"
+                      " interface here. The default is %s" % PYAXELWS_HOST,
+                      metavar="HOST")
     parser.add_option("-p", "--port", dest="port",
-                      type="int", default=8002,
+                      type="int", default=PYAXELWS_PORT,
                       help="You can specify the port to listen for"
-                      " connections here. Default port number is 8002.",
+                      " connections here. The default is %d." % PYAXELWS_PORT,
                       metavar="PORT")
-    parser.add_option("-d", "--directory", dest="output_dir",
-                      type="str", default=PYAXELWS_PATH,
-                      help="By default, files are saved to current working"
-                      " directory. Use this option to change where the saved"
-                      "files should go.",
+    parser.add_option("-d", "--directory", dest="download_path",
+                      type="str", default=PYAXELWS_DLPATH,
+                      help="Use this option to change where the files are"
+                      " saved. By default, files are saved in the current"
+                      " working directory.",
                       metavar="DIR")
 
     (options, args) = parser.parse_args()
