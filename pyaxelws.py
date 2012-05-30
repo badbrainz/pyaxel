@@ -62,20 +62,6 @@ def backtrace(debug_locals=True):
                     print "<ERROR WHILE PRINTING VALUE>"
 ## end of http://code.activestate.com/recipes/52215/ }}}
 
-def get_file_size(url):
-    retries = 0
-    content_length = 0
-    while retries < 5:
-        try:
-            request = urllib2.Request(url, None, STD_HEADERS)
-            data = urllib2.urlopen(request)
-            content_length = int(data.info()["Content-Length"])
-        except:
-            retries += 1
-        else:
-            break
-    return content_length
-
 def get_file_info(url):
     retries = 0
     info = {}
@@ -158,12 +144,12 @@ def general_configuration(options={}):
     conf = Config()
     conf.nworkers = 20
     conf.pool = threadpool.ThreadPool(num_workers=conf.nworkers)
-    conf.download_path = options.get("download_path", PYAXELWS_PATH)
-    conf.num_connections = options.get("num_connections", PYAXELWS_SPLITS)
-    conf.max_speed = options.get("max_speed", PYAXELWS_SPEED)
+    conf.download_path = options.get("download_path") or PYAXELWS_PATH
+    conf.num_connections = options.get("num_connections") or PYAXELWS_SPLITS
+    conf.max_speed = options.get("max_speed") or PYAXELWS_SPEED
     conf.distr_bandwidth = conf.max_speed * 1024
-    conf.host = options.get("host", PYAXELWS_HOST)
-    conf.port = options.get("port", PYAXELWS_PORT)
+    conf.host = options.get("host") or PYAXELWS_HOST
+    conf.port = options.get("port") or PYAXELWS_PORT
 
     urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
     urllib2.install_opener(urllib2.build_opener(urllib2.HTTPCookieProcessor()))
@@ -182,7 +168,7 @@ class Config(object):
 
 
 class Connection:
-    class DownloadState:
+    class Chunk:
         def __init__(self, progress, length, offset):
             self.done = False
             self.length = length
@@ -211,10 +197,10 @@ class Connection:
         offset = 0
         states = []
         addState = states.append
-        state = Connection.DownloadState
+        chunk = Connection.Chunk
         progress = pickle.get("progress", [0 for i in range(chunk_count)])
         for chunk_length, progress in zip(chunks, progress):
-            addState(state(progress, chunk_length-progress, offset+progress))
+            addState(chunk(progress, chunk_length-progress, offset+progress))
             offset += chunk_length
 
         self.chunk_count = chunk_count
@@ -224,14 +210,14 @@ class Connection:
 
         self.start_time = time.time()
 
-    def retrieve(self, state):
+    def retrieve(self, chunk):
         name = threading.currentThread().getName()
         request = urllib2.Request(self.url, None, STD_HEADERS)
-        if state.length == 0:
+        if chunk.length == 0:
             return
-        request.add_header("Range", "bytes=%d-%d" % (state.offset,
-                                                     state.offset + \
-                                                     state.length))
+        request.add_header("Range", "bytes=%d-%d" % (chunk.offset,
+                                                     chunk.offset + \
+                                                     chunk.length))
 
         while 1:
             try:
@@ -242,20 +228,20 @@ class Connection:
                 break
 
         output = os.open(self.output_fn, os.O_WRONLY) # os.O_BINARY
-        os.lseek(output, state.offset, os.SEEK_SET)
+        os.lseek(output, chunk.offset, os.SEEK_SET)
 
         block_size = 1024
-        while state.length > 0:
+        while chunk.length > 0:
             if self.need_to_quit:
                 os.close(output)
                 return
 
             time.sleep(self.sleep_timer)
 
-            if state.length >= block_size:
+            if chunk.length >= block_size:
                 fetch_size = block_size
             else:
-                fetch_size = state.length
+                fetch_size = chunk.length
 
             try:
                 data_block = data.read(fetch_size)
@@ -263,24 +249,20 @@ class Connection:
                     print "Connection %s: len(data_block) != fetch_size" + \
                         ", but continuing anyway." % name
                     os.close(output)
-                    return self.retrieve(state)
+                    return self.retrieve(chunk)
             except socket.timeout, s:
                 print "Connection", name, "timed out with", s
                 os.close(output)
-                return self.retrieve(state)
+                return self.retrieve(chunk)
 
             os.write(output, data_block)
-            state.length -= fetch_size
-            state.progress += fetch_size
-            state.offset += len(data_block)
+            chunk.length -= fetch_size
+            chunk.progress += fetch_size
+            chunk.offset += len(data_block)
 
         os.close(output)
-        state.done = True
+        chunk.done = True
         return True
-
-    def is_complete(self):
-        states = self.download_states
-        return len(self.download_states) >= 0 and all(s.done for s in states)
 
     def get_snapshot(self):
         states = self.download_states
@@ -294,9 +276,13 @@ class Connection:
         }
         return snapshot
 
-    def get_status(self):
+    def get_progress(self):
         states = self.download_states
         return [y.progress for y in states]
+
+    def is_complete(self):
+        states = self.download_states
+        return len(self.download_states) >= 0 and all(s.done for s in states)
 
     def update(self):
         end_time = time.time()
@@ -493,10 +479,12 @@ class ChannelState:
         connection.update()
 
         snapshot = connection.get_snapshot()
-        status = connection.get_status()
+        progress = connection.get_progress()
+
+        save_state_info(self.output_fp + self.state_fn, snapshot)
 
         # TODO improve this
-        downloaded = sum(status)
+        downloaded = sum(progress)
         avg_speed = downloaded / connection.elapsed_time
         max_speed = self.conf.distr_bandwidth
         if max_speed > 0:
@@ -506,8 +494,6 @@ class ChannelState:
             elif theta < 0.95: self.delay = 0.0
             connection.sleep(self.delay)
 
-        save_state_info(self.output_fp + self.state_fn, snapshot)
-
         self.channel.send_message(compact_msg({
             "event": PROC,
             "progress": progress,
@@ -515,17 +501,16 @@ class ChannelState:
         }))
 
         if connection.is_complete():
+            print "Completed:", self.output_fp + self.output_fn
+
+            self.inprogress = False
             self.close_connection()
 
             fpath = self.output_fp
             fname = self.output_fn
-            sname = self.state_fn
-            print "Completed:", fpath + fname
-
-            os.remove(fpath + sname)
+            os.remove(fpath + self.state_fn)
             os.rename(fpath + fname + ".part", fpath + fname)
 
-            self.inprogress = False
             self.state_manager.start('listening')
             self.channel.send_message(compact_msg({"event":END}))
 
@@ -636,7 +621,7 @@ class ChatChannel(asynchat.async_chat):
         #header.append(mask)
         header.append(length)
 
-        if length < 0x7E:
+        if length <= 0x7D:
             self.strat = self.parse_payload_masking_key
             self.set_terminator(4)
         elif length == 0x7E:
