@@ -510,10 +510,8 @@ class ChannelState:
 
         self.channel.send_message(compact_msg({
             "event": PROC,
-            "data": {
-                "prog": status,
-                "rate": bytes_to_str(avg_speed)
-            }
+            "progress": progress,
+            "rate": bytes_to_str(avg_speed)
         }))
 
         if connection.is_complete():
