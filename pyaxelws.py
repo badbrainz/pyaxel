@@ -82,6 +82,7 @@ def get_file_info(url):
     while retries < 1:
         try:
             request = urllib2.Request(url, None, STD_HEADERS)
+            request.get_method = lambda: "HEAD"
             data = urllib2.urlopen(request)
             header = data.info()
             info["type"] = header.get("Content-Type")
