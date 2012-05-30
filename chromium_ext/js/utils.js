@@ -4,14 +4,6 @@ var ConnectionEvent = {
     ERROR: 2
 };
 
-/* sock states */
-var ConnectionState = {
-    CONNECTING: 0,
-    OPEN: 1,
-    CLOSING: 2,
-    CLOSED: 3
-};
-
 var DownloadStatus = {
     QUEUED: 0,
     INITIALIZING: 1,

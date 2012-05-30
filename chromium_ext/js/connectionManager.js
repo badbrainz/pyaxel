@@ -2,33 +2,41 @@ var ConnectionManager = {};
 
 ConnectionManager.activeCount = 0;
 ConnectionManager.activeCalls = {};
+ConnectionManager.maxEstablished = 1;
+ConnectionManager.host = '127.0.0.1';
+ConnectionManager.port = 8002;
 
 ConnectionManager.establishConnection = function() {
-    if (ConnectionManager.activeCount >= preferences.getObject('prefs.downloads')) return;
+    if (ConnectionManager.activeCount >= ConnectionManager.maxEstablished)
+        return;
 
-    if (!DownloadManager.hasJobs()) return;
+    if (!DownloadManager.hasJobs())
+        return;
 
     ConnectionManager.activeCount++;
 
-    var host = preferences.getItem('prefs.host');
-    var port = preferences.getItem('prefs.port');
-    var address = formatString("ws://{0}:{1}", host, ~~port);
-    var connection = ConnectionFactory.createConnection(address);
+    var host = getPreference('prefs.host');
+    var port = getPreference('prefs.port');
+    var address = formatString('ws://{0}:{1}', ConnectionManager.host, ConnectionManager.port);
+    var connection = new Connection(address);
     connection.connevent.attach(ConnectionManager.onconnevent);
     connection.msgevent.attach(ConnectionManager.onmsgevent);
     connection.connect();
 };
 
 ConnectionManager.abort = function(id) {
-    if (id in ConnectionManager.activeCalls) ConnectionManager.activeCalls[id].abort();
+    if (id in ConnectionManager.activeCalls)
+        ConnectionManager.activeCalls[id].abort();
 };
 
 ConnectionManager.pause = function(id) {
-    if (id in ConnectionManager.activeCalls) ConnectionManager.activeCalls[id].pause();
+    if (id in ConnectionManager.activeCalls)
+        ConnectionManager.activeCalls[id].pause();
 };
 
 ConnectionManager.resume = function(id) {
-    if (id in ConnectionManager.activeCalls) ConnectionManager.activeCalls[id].resume();
+    if (id in ConnectionManager.activeCalls)
+        ConnectionManager.activeCalls[id].resume();
 };
 
 ConnectionManager.assignOrDisconnect = function(connection) {
@@ -44,18 +52,18 @@ ConnectionManager.assignOrDisconnect = function(connection) {
 
 ConnectionManager.onmsgevent = function(sender, response) {
     var download = sender.download;
-    var event = response.event;
 
-    if (event === MessageEvent.INITIALIZING) {
+    switch (response.event) {
+    case MessageEvent.INITIALIZING:
         download.status = DownloadStatus.CONNECTING; // fix this
         DownloadManager.jobStarted(download);
-    }
+        break;
 
-    else if (event === MessageEvent.ACK) {
+    case MessageEvent.ACK:
         sender.resume();
-    }
+        break;
 
-    else if (event === MessageEvent.OK) {
+    case MessageEvent.OK:
         download.status = DownloadStatus.INITIALIZING;
         download.size = formatBytes(response.size);
         download.fname = response.name;
@@ -64,56 +72,59 @@ ConnectionManager.onmsgevent = function(sender, response) {
         download.chunks = response.chunks;
         download.progress = response.progress;
         DownloadManager.jobStarted(download);
-    }
+        break;
 
-    else if (event === MessageEvent.BAD_REQUEST) {
+    case MessageEvent.BAD_REQUEST:
         download.status = DownloadStatus.CANCELLED;
         DownloadManager.jobCompleted(download);
         sender.abort();
-    }
+        break;
 
-    else if (event === MessageEvent.ERROR) {
+    case MessageEvent.ERROR:
         if (download) {
             download.status = DownloadStatus.CANCELLED;
             DownloadManager.jobCompleted(download);
         }
         sender.abort();
-    }
+        break;
 
-    else if (event === MessageEvent.PROCESSING) {
+    case MessageEvent.PROCESSING:
         download.status = DownloadStatus.IN_PROGRESS;
-        download.percentage = download.fsize ? Math.floor(sum(response.data.prog) * 100 / download.fsize) : 0;
-        download.progress = response.data.prog;
-        download.speed = response.data.rate;
-    }
+        download.percentage = download.fsize ? Math.floor(sum(response.progress) * 100 / download.fsize) : 0;
+        download.progress = response.progress;
+        download.speed = response.rate;
+        break;
 
-    else if (event === MessageEvent.INCOMPLETE) {
+    case MessageEvent.INCOMPLETE:
         download.status = DownloadStatus.CANCELLED;
         DownloadManager.jobCompleted(download);
         ConnectionManager.assignOrDisconnect(sender);
-    }
+        break;
 
-    else if (event === MessageEvent.END) {
+    case MessageEvent.END:
         download.status = DownloadStatus.COMPLETE;
         DownloadManager.jobCompleted(download);
         ConnectionManager.assignOrDisconnect(sender);
-    }
+        break;
 
-    else if (event === MessageEvent.STOPPED) {
+    case MessageEvent.STOPPED:
         download.status = DownloadStatus.PAUSED;
+        break;
     }
 
     DownloadManager.update(download);
 };
 
 ConnectionManager.onconnevent = function(sender, response) {
-    var event = response.event;
     var download = sender.download;
 
-    if (event === ConnectionEvent.CONNECTED) {
+    switch (response.event) {
+    case ConnectionEvent.CONNECTED:
         var job = DownloadManager.getJob();
+
+        // user removed job before connection was established.
+        // NOTE ui shouldn't allow it anyway.
         if (!job) {
-            // user removed job before connection was established
             sender.destroy();
             return;
         }
@@ -126,19 +137,20 @@ ConnectionManager.onconnevent = function(sender, response) {
                 type: 'WKR'
             }
         });
-    }
+        break;
 
-    else if (event === ConnectionEvent.DISCONNECTED) {
+    case ConnectionEvent.DISCONNECTED:
         delete ConnectionManager.activeCalls[download.id];
         sender.destroy();
         ConnectionManager.activeCount--;
         ConnectionManager.establishConnection();
-    }
+        break;
 
-    else if (event === ConnectionEvent.ERROR) {
+    case ConnectionEvent.ERROR:
         if (download && download.id in ConnectionManager.activeCalls)
             delete ConnectionManager.activeCalls[download.id];
         sender.destroy();
         ConnectionManager.activeCount--;
+        break;
     }
 };

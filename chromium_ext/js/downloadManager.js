@@ -14,68 +14,60 @@ var Download = function(url, id) {
 };
 
 var DownloadManager = {};
-
 DownloadManager.uniqueID = 1;
 DownloadManager.catalog = {};
-DownloadManager.activeCatalog = {};
-DownloadManager.completedCatalog = {};
-DownloadManager.unassignedCatalog = {};
-//DownloadManager.processedJobs = new Queue();
+DownloadManager.catalog._ = {};
+DownloadManager.catalog.active = {};
+DownloadManager.catalog.completed = {};
+DownloadManager.catalog.unassigned = {};
 DownloadManager.unassignedJobs = new Queue();
 
-DownloadManager.addJob = function(url) {
-    function duplicate(e) { return url === e.url; }
-    if (DownloadManager.getUnassignedJobs().some(duplicate) ||
-        DownloadManager.getActiveJobs().some(duplicate))
+DownloadManager.addJob = function(job, wait) {
+    var preset = job instanceof Download;
+    var url = preset ? job.url : job;
+
+    if (DownloadManager.hasJob(url))
         return;
 
-    var id = 'dl_' + DownloadManager.uniqueID++;
-    var download = new Download(url, id);
-    DownloadManager.prepareJob(download);
-    DownloadManager.update(download);
-};
+    if (!preset)
+        job = new Download(url, 'dl_' + DownloadManager.uniqueID++);
 
-DownloadManager.prepareJob = function(job) {
-    if (!(job instanceof Download))
-        return;
-
-    var id = job.id;
     job.status = DownloadStatus.QUEUED;
-    DownloadManager.catalog[id] = job;
-    if (!(id in DownloadManager.unassignedCatalog)) {
-        DownloadManager.unassignedCatalog[id] = job;
+    DownloadManager.catalog._[job.id] = job;
+    DownloadManager.catalog.unassigned[job.id] = job;
+    if (!wait)
         DownloadManager.unassignedJobs.put(job);
-    }
+
+    DownloadManager.update(job);
 
     ConnectionManager.establishConnection();
 };
 
 DownloadManager.cancelJob = function(id) {
     // may be in queued state
-    delete DownloadManager.unassignedCatalog[id];
+    delete DownloadManager.catalog.unassigned[id];
 
     // may be in processing state
-    delete DownloadManager.activeCatalog[id];
+    delete DownloadManager.catalog.active[id];
 
-    DownloadManager.completedCatalog[id] = DownloadManager.catalog[id];
+    DownloadManager.catalog.completed[id] = DownloadManager.catalog._[id];
 
     ConnectionManager.abort(id);
 };
 
 DownloadManager.retryJob = function(id) {
-    // only if queued or cancelled state
-    var download = DownloadManager.completedCatalog[id];
-    if (!download) {
-        download = DownloadManager.unassignedCatalog[id];
-        if (!download)
-            return;
-    }
+    // accept iff queued or completed
+    if (!(id in DownloadManager.catalog.completed ||
+        id in DownloadManager.catalog.unassigned))
+        return;
 
-    // may be in cancelled state
-    delete DownloadManager.completedCatalog[id];
+    var download = DownloadManager.catalog.completed[id] ||
+        DownloadManager.catalog.unassigned[id];
 
-    DownloadManager.prepareJob(download);
-    DownloadManager.update(download);
+    delete DownloadManager.catalog.completed[id];
+    delete DownloadManager.catalog.unassigned[id];
+
+    DownloadManager.addJob(download);
 };
 
 DownloadManager.pauseJob = function(id) {
@@ -87,10 +79,10 @@ DownloadManager.resumeJob = function(id) {
 };
 
 DownloadManager.removeJob = function(id) {
-    delete DownloadManager.catalog[id];
-    delete DownloadManager.unassignedCatalog[id];
-    delete DownloadManager.activeCatalog[id];
-    delete DownloadManager.completedCatalog[id];
+    delete DownloadManager.catalog._[id];
+    delete DownloadManager.catalog.active[id];
+    delete DownloadManager.catalog.completed[id];
+    delete DownloadManager.catalog.unassigned[id];
 
     DownloadManager.updateFullList();
 };
@@ -98,12 +90,36 @@ DownloadManager.removeJob = function(id) {
 DownloadManager.getJob = function() {
     var job = DownloadManager.unassignedJobs.get();
     if (job) {
-        if (!(job.id in DownloadManager.unassignedCatalog))
+        if (!(job.id in DownloadManager.catalog.unassigned))
             return DownloadManager.getJob();
-        delete DownloadManager.unassignedCatalog[job.id];
-//        DownloadManager.activeCatalog[job.id] = job;
+        delete DownloadManager.catalog.unassigned[job.id];
+        //        DownloadManager.catalog.active[job.id] = job;
     }
     return job;
+};
+
+DownloadManager.hasJob = function(url) {
+    function duplicate(job) {
+        return url === job.url;
+    }
+    return DownloadManager.getUnassignedJobs().some(duplicate) ||
+        DownloadManager.getActiveJobs().some(duplicate);
+};
+
+DownloadManager.getUnassignedJobs = function() {
+    return getValues(DownloadManager.catalog.unassigned);
+};
+
+DownloadManager.getCompletedJobs = function() {
+    return getValues(DownloadManager.catalog.completed);
+};
+
+DownloadManager.getActiveJobs = function() {
+    return getValues(DownloadManager.catalog.active);
+};
+
+DownloadManager.getAllJobs = function() {
+    return getValues(DownloadManager.catalog._);
 };
 
 DownloadManager.getJobCount = function() {
@@ -114,42 +130,26 @@ DownloadManager.hasJobs = function() {
     return !DownloadManager.unassignedJobs.empty();
 };
 
-DownloadManager.getUnassignedJobs = function() {
-    return getValues(DownloadManager.unassignedCatalog);
-};
-
-DownloadManager.getCompletedJobs = function() {
-    return getValues(DownloadManager.completedCatalog);
-};
-
-DownloadManager.getActiveJobs = function() {
-    return getValues(DownloadManager.activeCatalog);
-};
-
-DownloadManager.getAllJobs = function() {
-    return getValues(DownloadManager.catalog);
-};
-
 DownloadManager.eraseInactiveJobs = function() {
-//    DownloadManager.completedCatalog = {};
-    for (var k in DownloadManager.completedCatalog) {
-        delete DownloadManager.completedCatalog[k];
-        delete DownloadManager.catalog[k];
+    //    DownloadManager.catalog.completed = {};
+    for (var k in DownloadManager.catalog.completed) {
+        delete DownloadManager.catalog.completed[k];
+        delete DownloadManager.catalog._[k];
     }
     DownloadManager.updateFullList();
 };
 
-DownloadManager.jobCompleted = function(job) {
-    delete DownloadManager.activeCatalog[job.id];
-    DownloadManager.completedCatalog[job.id] = job;
+DownloadManager.jobStarted = function(job) {
+    DownloadManager.catalog.active[job.id] = job;
 };
 
-DownloadManager.jobStarted = function(job) {
-    DownloadManager.activeCatalog[job.id] = job;
+DownloadManager.jobCompleted = function(job) {
+    delete DownloadManager.catalog.active[job.id];
+    DownloadManager.catalog.completed[job.id] = job;
 };
 
 DownloadManager.jobFailed = function(job) {
-//    DownloadManager.activeCatalog[job.id] = job;
+    //    DownloadManager.catalog.active[job.id] = job;
 };
 
 DownloadManager.update = function(job) {
@@ -165,10 +165,9 @@ DownloadManager.updateCompletedList = function() {
 };
 
 DownloadManager.updateFullList = function() {
-    Background.notify(DownloadManager.getAllJobs(), true);
+    Background.notify(DownloadManager.getAllJobs());
 };
 
 DownloadManager.getFullList = function() {
     return DownloadManager.getAllJobs();
 };
-

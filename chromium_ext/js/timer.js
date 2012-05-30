@@ -11,14 +11,14 @@ Timer.prototype = {
         if (!this._enabled) {
             this._duration = new Date();
             this._enabled = true;
-            this._id = setInterval(this.callback, this.interval);
+            this._id = window.setInterval(this.callback, this.interval);
         }
     },
 
     stop: function() {
         if (this._enabled) {
             this._enabled = false;
-            clearInterval(this._id);
+            window.clearInterval(this._id);
         }
     },
 

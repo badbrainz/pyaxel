@@ -6,10 +6,18 @@ function createTextNode(value) {
     return document.createTextNode(value);
 }
 
-function createLink(onclick, value) {
+function createLink(onclick, value, href) {
     var link = document.createElement('a');
+    typeof onclick === 'function' && (link.onclick = onclick);
+    link.href = href || '#';
+    href && (link.target = '_blank');
+    link.appendChild(createTextNode(value));
+    return link;
+}
+
+function createFakeLink(onclick, value) {
+    var link = document.createElement('div');
     link.onclick = onclick;
-    link.href = '#';
     link.appendChild(createTextNode(value));
     return link;
 }
@@ -17,19 +25,19 @@ function createLink(onclick, value) {
 function createElementWithClassName(type, className, content) {
     var elm = document.createElement(type);
     elm.className = className;
-    elm.appendChild(createTextNode(content));
+    typeof content !== 'undefined' && elm.appendChild(createTextNode(content));
     return elm;
 }
 
-function createMeter(min, max, val) {
-    var elm = document.createElement('meter');
-    elm.innerHTML = '_mc' + metercounter++;
-    //elm.min = min;
-    //elm.max = max;
-    elm.value = val || 0;
-    elm.style.display = 'inline-block';
-    return elm;
-}
+//function createMeter(min, max, val) {
+//    var elm = document.createElement('meter');
+//    elm.innerHTML = 'mc_' + metercounter++;
+//    //elm.min = min;
+//    //elm.max = max;
+//    elm.value = val || 0;
+//    elm.style.display = 'inline-block';
+//    return elm;
+//}
 
 function createProgress(max, val) {
     var elm = document.createElement('progress');
@@ -89,8 +97,6 @@ Display.clear = function() {
 };
 
 Display.showResults = function(data) {
-    //if (data.reset)
-    //    Display.clear()
     data.list.forEach(function(state) {
         Display.update(state);
     });
@@ -99,11 +105,11 @@ Display.showResults = function(data) {
 Display.update = function(state) {
     var id = state.id;
     if (id in Display.panels) Display.panels[id].update(state);
-    else Display.panels[id] = new Display.Panel(state);
+    else Display.panels[id] = new Panel(state);
 };
 
 /* Panel */
-Display.Panel = function(state) {
+var Panel = function(state) {
     this.state = state;
     this.status = '';
 
@@ -123,16 +129,17 @@ Display.Panel = function(state) {
     this.rootNode.appendChild(this.statusNode);
     this.statusNode.appendChild(labelsNode);
 
-    var status_text = this.getStatusText();
     var labels = {
-        url: createElementWithClassName('div', 'url', state.url),
-        status: createElementWithClassName('div', 'status', status_text),
+        url: createLink(null, state.url, state.url),
+        status: createElementWithClassName('div', 'status', this.getStatusText()),
         progress: createElementWithClassName('div', 'progress', state.progress)
     };
+    labels.url.className = 'url';
     for (var i in labels)
         labelsNode.appendChild(labels[i]);
     this.labels = labels;
     labelsNode.appendChild(controlsNode);
+
     var title = createElementWithClassName('div', 'title');
     this.labels.name = createElementWithClassName('div', 'name', state.name);
     this.labels.size = createElementWithClassName('div', 'size dyninfo', state.size);
@@ -145,11 +152,11 @@ Display.Panel = function(state) {
     labelsNode.insertAdjacentElement('afterBegin', title);
 
     var controls = {
-        pause: createLink(this.pause.bind(this), 'Pause'),
-        resume: createLink(this.resume.bind(this), 'Resume'),
-        retry: createLink(this.retry.bind(this), 'Retry'),
-        cancel: createLink(this.cancel.bind(this), 'Cancel'),
-        remove: createLink(this.remove.bind(this), 'Remove')
+        pause: createFakeLink(this.pause.bind(this), 'Pause'),
+        resume: createFakeLink(this.resume.bind(this), 'Resume'),
+        retry: createFakeLink(this.retry.bind(this), 'Retry'),
+        cancel: createFakeLink(this.cancel.bind(this), 'Cancel'),
+        remove: createFakeLink(this.remove.bind(this), 'Remove')
     };
     for (var i in controls)
         controlsNode.appendChild(controls[i]);
@@ -178,74 +185,87 @@ Display.Panel = function(state) {
     this.update(state);
 };
 
-Display.Panel.prototype = {
+Panel.prototype = {
     update: function(state) {
         this.state = state;
         var status = state.status;
+        var canvas = this.canvas;
+        var labels = this.labels;
+        var controls = this.controls;
 
         if (this.status !== status) {
             this.status = status;
             this.adjustDocPosition(status);
-            this.labels.size.innerHTML = state.size;
-            this.labels.name.innerHTML = state.fname;
-            this.labels.status.innerHTML = this.getStatusText();
+            labels.size.innerHTML = state.size;
+            labels.name.innerHTML = state.fname;
+            labels.status.innerHTML = this.getStatusText();
         }
 
-        var idle = status === DownloadStatus.PAUSED;
+        var starting = status === DownloadStatus.INITIALIZING;
         var active = status === DownloadStatus.IN_PROGRESS;
+        var idle = status === DownloadStatus.PAUSED;
         var done = status === DownloadStatus.COMPLETE;
         var inactive = status === DownloadStatus.QUEUED || status === DownloadStatus.CANCELLED;
 
-        if (status === DownloadStatus.INITIALIZING) {
+        if (starting) {
             this.showIndicators(true);
         }
 
-        this.labels.percent.innerHTML = state.percentage + '% of&nbsp;';
-        this.labels.rate.innerHTML = '&nbsp;-&nbsp;' + state.speed + 'b/s&nbsp;';
+        labels.percent.innerHTML = done ? '' : state.percentage + '% of&nbsp;';
+        labels.rate.innerHTML = '&nbsp;-&nbsp;' + state.speed + 'b/s&nbsp;';
 
         // draw pie progress indicator
         if (idle || active) {
             var pie = Indicators.Pie;
-            this.canvas.clearRect(0, 0, pie.width, pie.height);
-            this.canvas.beginPath();
-            this.canvas.moveTo(pie.centerX, pie.centerY);
-            this.canvas.arc(pie.centerX, pie.centerY, pie.radius, pie.base, pie.base + pie.base2 * state.percentage, false);
-            this.canvas.lineTo(pie.centerX, pie.centerY);
-            this.canvas.fill();
-            this.canvas.closePath();
+            canvas.clearRect(0, 0, pie.width, pie.height);
+            canvas.beginPath();
+            canvas.moveTo(pie.centerX, pie.centerY);
+            canvas.arc(pie.centerX, pie.centerY, pie.radius, pie.base, pie.base + pie.base2 * state.percentage, false);
+            canvas.lineTo(pie.centerX, pie.centerY);
+            canvas.fill();
+            canvas.closePath();
         }
         else if (inactive || done) {
             this.showIndicators(false);
-            this.labels.rate.innerHTML = '';
+            labels.rate.innerHTML = '';
         }
 
         // draw progress bars
         if (!this.progress_bars) {
             if (state.chunks.length > 0) {
-                this.labels.progress.innerHTML = '';
+                labels.progress.innerHTML = '';
                 var progressbar_count = state.chunks.length;
                 var percent = Math.floor((1 / progressbar_count) * 100);
                 this.progress_bars = state.chunks.map(function(e) {
-                    var node = this.labels.progress.appendChild(createProgress(e, 0));
+                    var node = labels.progress.appendChild(createProgress(e, 0));
                     node.style.width = percent + '%';
                     return node;
                 }, this);
-                this.labels.progress.style.width = Indicators.Bar.width + 'px';
+                labels.progress.style.width = Indicators.Bar.width + 'px';
             }
         }
 
         if (this.progress_bars) {
-            this.progress_bars.forEach(function(e, i) {
-                e.value = state.progress[i];
-            });
+            if (done || inactive) {
+                this.progress_bars.forEach(function(e, i) {
+                    e.parentNode.removeChild(e);
+                });
+                delete this.progress_bars;
+            }
+            else {
+                this.progress_bars.forEach(function(e, i) {
+                    e.value = state.progress[i];
+                });
+            }
         }
 
         // show link controls
-        show(this.controls.pause, active && !idle);
-        show(this.controls.resume, idle);
-        show(this.controls.retry, inactive && !done);
-        show(this.controls.cancel, active || idle);
-        show(this.controls.remove, inactive || done);
+        show(controls.pause, active);
+//        show(controls.pause, active && !idle);
+        show(controls.resume, idle);
+        show(controls.retry, inactive);
+        show(controls.cancel, active || idle);
+        show(controls.remove, inactive || done);
     },
 
     adjustDocPosition: function(status) {
