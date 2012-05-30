@@ -1,8 +1,8 @@
 {
-   "name": "PyAxelWS Download Accelerator",
+   "name": "PyAxelWS",
    "version": "1.1.0",
    "minimum_chrome_version": "16",
-   "description": "PyAxelWS Download Accelerator for Linux",
+   "description": "Download Accelerator for Chrome/Linux.",
    "update_url": "http://clients2.google.com/service/update2/crx",
    "background_page": "background.html",
    "options_page": "settings.html",

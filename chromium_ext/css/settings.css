@@ -171,4 +171,5 @@ input#location:invalid,input#host:invalid,input#bandwidth:invalid,input#port:inv
 input#location,input#host,input#port,input#bandwidth
 {
 	padding:3px
+;margin: 2px 0;
 }

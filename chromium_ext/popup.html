@@ -2,32 +2,29 @@
 <html>
 <head>
 <style>
-.menuitem {-webkit-user-select:none;color:#345;margin-bottom:1px;padding:4px 8px;-webkit-border-radius:.3em;border: solid 1px #fff;-webkit-box-sizing:border-box}
-.menuitem {padding: 4px 8px 4px 6px}
-.menuitem, .menuitem > * {display:-webkit-box;-webkit-box-align: center}
-.menuitem > *:last-child {padding-left: 5px}
-.menuitem > *:first-child {height: 16px;width: 16px}
+body {font:13px Helvetica, Arial, sans-serif;width:140px;margin:2px;padding:0}
+span {padding-left: 5px}
+.menuitem {-webkit-user-select:none;color:#345;margin-bottom:1px;padding:4px 8px;-webkit-border-radius:.3em;border: solid 1px #fff;-webkit-box-sizing:border-box;padding: 4px 8px 4px 6px}
+.menuitem, img, span {display:-webkit-box;-webkit-box-align: center}
 .menuitem-decor {text-shadow:1px 1px 1px rgba(0,0,0,0.18)}
 .menuitem:hover {background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,#f6f8f9), color-stop(50%,#e5ebee), color-stop(51%,#d7dee3), color-stop(100%,#f5f7f9));border: solid 1px #bcd;cursor:pointer}
-.seperator {border-top:1px solid #aaa;margin:2px 0}
-body {font:13px Helvetica, Arial, sans-serif;width:140px;margin:2px;padding:0}
 </style>
 <script>
 var wnd = window;
 document.addEventListener("DOMContentLoaded", function () {
-    document.querySelector("#downloads").addEventListener("click", function() {
-        wnd.close();
-        chrome.extension.getBackgroundPage().displayPage("downloads.html");
-    }, false);
-    document.querySelector("#preferences").addEventListener("click", function() {
-        wnd.close();
-        chrome.extension.getBackgroundPage().displayPage("settings.html");
-    }, false);
+document.getElementById("downloads").addEventListener("click", function() {
+wnd.close();
+chrome.extension.getBackgroundPage().displayPage("downloads.html");
+}, false);
+document.getElementById("preferences").addEventListener("click", function() {
+wnd.close();
+chrome.extension.getBackgroundPage().displayPage("settings.html");
+}, false);
 }, false);
 </script>
 </head>
 <body>
 <div class="menuitem flex" id="downloads"><img src="../images/dbase.png" width=16 height=16 /><span>Downloads</span></div>
-<div class="menuitem flex" id="preferences"><img src="../images/gear.png" width=16 height=16 /><span>preferences</span></div>
+<div class="menuitem flex" id="preferences"><img src="../images/gear.png" width=16 height=16 /><span>Preferences</span></div>
 </body>
 </html>
