@@ -125,7 +125,7 @@ def bytes_to_str(num, prefix=True):
     except TypeError:
         return "0"
 
-def parse_header(line):
+def parse_header_field(line):
     plist = [x.strip() for x in line.split(';')]
     key = plist.pop(0).lower()
     pdict = {}
@@ -165,6 +165,7 @@ def general_configuration(options={}):
     conf.host = options.get("host") or PYAXELWS_HOST
     conf.port = options.get("port") or PYAXELWS_PORT
 
+    #httplib.HTTPConnection.debuglevel = 1
     urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
     urllib2.install_opener(urllib2.build_opener(urllib2.HTTPCookieProcessor()))
     socket.setdefaulttimeout(20)
@@ -337,14 +338,12 @@ class ChannelState:
         try:
             msg = json.loads(data)
             self.state_manager.execute(msg["cmd"], msg.get("arg"))
-        except statemachine.TransitionError, e:
-            resp = "'%s' command not recognized <State:%s>" % (e.inp, e.cur)
-            self.post_message(compact_msg({"event":BAD_REQUEST,"data":resp}))
-        except statemachine.FSMError, e:
-            self.post_message(compact_msg({"event":BAD_REQUEST,"data":e}))
+        except (IOError, statemachine.TransitionError), e:
+            self.close_connection()
+            self.post_message(compact_msg({"event":BAD_REQUEST,
+                "data":str(e)}))
         except:
             self.close_connection()
-            self.state_manager.start('listening')
             self.post_message(compact_msg({"event":BAD_REQUEST,"data":
                 "internal server error"}))
 
@@ -401,7 +400,7 @@ class ChannelState:
         if file_name == None:
             file_name = info.get("disposition")
             if file_name != None:
-                key, params = parse_header(file_name)
+                key, params = parse_header_field(file_name)
                 if key == "attachment":
                     file_name = params.get("filename") or params.get("name")
                 else:
