@@ -1,0 +1,135 @@
+BASE FRAMING PROTOCOL, http://tools.ietf.org/html/rfc6455#section-5.2
+---------------------
+ws-frame                = frame-fin           ; 1 bit in length
+                          frame-rsv1          ; 1 bit in length
+                          frame-rsv2          ; 1 bit in length
+                          frame-rsv3          ; 1 bit in length
+                          frame-opcode        ; 4 bits in length
+                          frame-masked        ; 1 bit in length
+                          frame-payload-length   ; either 7, 7+16,
+                                                 ; or 7+64 bits in
+                                                 ; length
+                          [ frame-masking-key ]  ; 32 bits in length
+                          frame-payload-data     ; n*8 bits in
+                                                 ; length, where
+                                                 ; n >= 0
+
+frame-fin               = %x0 ; more frames of this message follow
+                        / %x1 ; final frame of this message
+                              ; 1 bit in length
+
+frame-rsv1              = %x0 / %x1
+                          ; 1 bit in length, MUST be 0 unless
+                          ; negotiated otherwise
+
+frame-rsv2              = %x0 / %x1
+                          ; 1 bit in length, MUST be 0 unless
+                          ; negotiated otherwise
+
+frame-rsv3              = %x0 / %x1
+                          ; 1 bit in length, MUST be 0 unless
+                          ; negotiated otherwise
+
+frame-opcode            = frame-opcode-non-control /
+                          frame-opcode-control /
+                          frame-opcode-cont
+
+frame-opcode-cont       = %x0 ; frame continuation
+
+frame-opcode-non-control= %x1 ; text frame
+                        / %x2 ; binary frame
+                        / %x3-7
+                        ; 4 bits in length,
+                        ; reserved for further non-control frames
+
+frame-opcode-control    = %x8 ; connection close
+                        / %x9 ; ping
+                        / %xA ; pong
+                        / %xB-F ; reserved for further control
+                                ; frames
+                                ; 4 bits in length
+
+frame-masked            = %x0
+                        ; frame is not masked, no frame-masking-key
+                        / %x1
+                        ; frame is masked, frame-masking-key present
+                        ; 1 bit in length
+
+frame-payload-length    = ( %x00-7D )
+                        / ( %x7E frame-payload-length-16 )
+                        / ( %x7F frame-payload-length-63 )
+                        ; 7, 7+16, or 7+64 bits in length,
+                        ; respectively
+
+frame-payload-length-16 = %x0000-FFFF ; 16 bits in length
+
+frame-payload-length-63 = %x0000000000000000-7FFFFFFFFFFFFFFF
+                        ; 64 bits in length
+
+frame-masking-key       = 4( %x00-FF )
+                          ; present only if frame-masked is 1
+                          ; 32 bits in length
+
+frame-payload-data      = (frame-masked-extension-data
+                           frame-masked-application-data)
+                        ; when frame-masked is 1
+                          / (frame-unmasked-extension-data
+                            frame-unmasked-application-data)
+                        ; when frame-masked is 0
+
+frame-masked-extension-data     = *( %x00-FF )
+                        ; reserved for future extensibility
+                        ; n*8 bits in length, where n >= 0
+
+frame-masked-application-data   = *( %x00-FF )
+                        ; n*8 bits in length, where n >= 0
+
+frame-unmasked-extension-data   = *( %x00-FF )
+                        ; reserved for future extensibility
+                        ; n*8 bits in length, where n >= 0
+
+frame-unmasked-application-data = *( %x00-FF )
+                        ; n*8 bits in length, where n >= 0
+
+
+A brief, Metalink Document that describes a single file:
+--------------------------------------------------------
+<?xml version="1.0" encoding="UTF-8"?>
+<metalink xmlns="urn:ietf:params:xml:ns:metalink">
+    <file name="example.ext">
+        <size>14471447</size>
+        <url>ftp://ftp.example.com/example.ext</url>
+        <url>http://example.com/example.ext</url>
+        <metaurl mediatype="torrent">http://example.com/example.ext.torrent</metaurl>
+    </file>
+</metalink>
+
+
+A more extensive Metalink Document that describes two files:
+------------------------------------------------------------
+<?xml version="1.0" encoding="UTF-8"?>
+<metalink xmlns="urn:ietf:params:xml:ns:metalink">
+    <published>2009-05-15T12:23:23Z</published>
+    <file name="example.ext">
+        <size>14471447</size>
+        <identity>Example</identity>
+        <version>1.0</version>
+        <language>en</language>
+        <description>A description of the example file for download.</description>
+        <hash type="sha-256">f0ad929cd259957e160ea442eb80986b5f01...</hash>
+        <url location="de" priority="1">ftp://ftp.example.com/example.ext</url>
+        <url location="fr" priority="1">http://example.com/example.ext</url>
+        <metaurl mediatype="torrent" priority="2">http://example.com/example.ext.torrent</metaurl>
+    </file>
+    <file name="example2.ext">
+        <size>14471447</size>
+        <identity>Example2</identity>
+        <version>1.0</version>
+        <language>en</language>
+        <description>Another description for a second file.</description>
+        <hash type="sha-256">2f548ce50c459a0270e85a7d63b2383c5523...</hash>
+        <url location="de" priority="1">ftp://ftp.example.com/example2.ext</url>
+        <url location="fr" priority="1">http://example.com/example2.ext</url>
+        <metaurl mediatype="torrent" priority="2">http://example.com/example2.ext.torrent</metaurl>
+    </file>
+</metalink>

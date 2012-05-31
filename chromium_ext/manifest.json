@@ -1,0 +1,26 @@
+{
+   "name": "PyAxelWS",
+   "version": "1.1.0",
+   "minimum_chrome_version": "16",
+   "description": "Download Accelerator for Chrome/Linux.",
+   "update_url": "http://clients2.google.com/service/update2/crx",
+   "background_page": "background.html",
+   "options_page": "settings.html",
+   "browser_action": {
+      "default_icon": "images/19.png",
+      "default_popup": "popup.html"
+   },
+   "icons": {
+      "128": "images/128.png",
+      "16": "images/16.png",
+      "48": "images/48.png"
+   },
+   "permissions": [
+      "https://*/*",
+      "http://*/*",
+      "ftp://*/*",
+      "notifications",
+      "contextMenus",
+      "tabs"
+      ]
+}
