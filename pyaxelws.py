@@ -2,7 +2,7 @@
 
 import os, sys, time, math, cPickle, json, traceback
 import base64, hashlib, struct, array
-import threading, urllib2, socket, asyncore, asynchat
+import threading, urllib2, httplib, urlparse, socket, asyncore, asynchat
 
 from optparse import OptionParser
 from urllib import url2pathname
@@ -62,22 +62,36 @@ def backtrace(debug_locals=True):
                     print "<ERROR WHILE PRINTING VALUE>"
 ## end of http://code.activestate.com/recipes/52215/ }}}
 
-def get_file_info(url):
-    retries = 0
-    info = {}
-    while retries < 1:
-        try:
-            request = urllib2.Request(url, None, STD_HEADERS)
-            request.get_method = lambda: "HEAD"
-            data = urllib2.urlopen(request)
-            header = data.info()
-            info["type"] = header.get("Content-Type")
-            info["size"] = int(header.get("Content-Length"))
-            info["name"] = header.get("Content-Disposition")
-        except:
-            retries += 1
+def follow_redirect(url):
+    redirect = 1
+    while True:
+        comps = urlparse.urlparse(url)
+        connection = httplib.HTTPConnection(comps.netloc)
+        connection.request("HEAD", comps.path)
+        response = connection.getresponse()
+        if (response.status >= 300) and (response.status <= 399):
+            redirect -= 1
+            if redirect == 0:
+                raise IOError, "hit redirection limit: %s" % url
+            url = response.getheader("Location")
         else:
             break
+    if response.status >= 200 and response.status <= 299:
+        return url, response.msg
+    else:
+        raise IOError, "request error: %s %s %s" % \
+            (url, response.status, response.reason)
+
+def get_file_info(url):
+    info = {}
+    try:
+        location, header = follow_redirect(url)
+        info["type"] = header.get("content-type")
+        info["length"] = int(header.get("content-length"))
+        info["disposition"] = header.get("content-disposition")
+        info["location"] = location
+    except:
+        raise
     return info
 
 def get_state_info(filename):
@@ -376,16 +390,16 @@ class ChannelState:
         adjust_bandwith(self.channel.server.get_client_count())
 
         url = args.get("url")
-        file_info = get_file_info(url)
+        info = get_file_info(url)
 
-        if len(file_info) == 0: # TODO fix this
-            raise Exception("Couldn't get file info <%s>" % url2pathname(url))
+        if len(info) == 0: # TODO fix this
+            raise Exception("couldn't get file info <%s>" % url2pathname(url))
 
         path = self.conf.download_path
 
         file_name = args.get("name")
         if file_name == None:
-            file_name = file_info.get("name")
+            file_name = info.get("disposition")
             if file_name != None:
                 key, params = parse_header(file_name)
                 if key == "attachment":
@@ -399,10 +413,11 @@ class ChannelState:
 
         file_name = url2pathname(file_name)
         file_path = os.path.join(path, file_name)
-        file_type = file_info.get("type")
-        file_size = file_info.get("size", 0)
+        file_type = info.get("type")
+        file_size = info.get("length", 0)
+        file_url = info.get("location")
 
-        print "Downloading:", url
+        print "Downloading:", file_url
         print "Location:", path
         print "Size:", bytes_to_str(file_size)
 
@@ -413,7 +428,7 @@ class ChannelState:
         os.close(output_fd)
 
         #self.delay =  1e6 / (self.channel.getMaxSpeed() * segments)
-        connection = Connection(file_path + ".part", url, file_size,
+        connection = Connection(file_path + ".part", file_url, file_size,
                                 self.conf.num_connections, state_info)
 
         addJob = self.conf.pool.addJob
