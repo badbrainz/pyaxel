@@ -75,12 +75,8 @@ ConnectionManager.onmsgevent = function(sender, response) {
         break;
 
     case MessageEvent.BAD_REQUEST:
-        download.status = DownloadStatus.CANCELLED;
-        DownloadManager.jobCompleted(download);
-        sender.abort();
-        break;
-
     case MessageEvent.ERROR:
+        console.log(response.data);
         if (download) {
             download.status = DownloadStatus.CANCELLED;
             DownloadManager.jobCompleted(download);
@@ -140,17 +136,17 @@ ConnectionManager.onconnevent = function(sender, response) {
         break;
 
     case ConnectionEvent.DISCONNECTED:
+        ConnectionManager.activeCount--;
         delete ConnectionManager.activeCalls[download.id];
         sender.destroy();
-        ConnectionManager.activeCount--;
         ConnectionManager.establishConnection();
         break;
 
     case ConnectionEvent.ERROR:
+        ConnectionManager.activeCount--;
         if (download && download.id in ConnectionManager.activeCalls)
             delete ConnectionManager.activeCalls[download.id];
         sender.destroy();
-        ConnectionManager.activeCount--;
         break;
     }
 };

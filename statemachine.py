@@ -6,13 +6,8 @@ class FSMError(Exception):
         return self.msg
 
 class TransitionError(FSMError):
-    def __init__(self, cur, inp, msg=""):
+    def __init__(self, msg=""):
         FSMError.__init__(self, msg)
-        self.cur = cur
-        self.inp = inp
-
-class RestartError(FSMError):
-    pass
 
 class StateMachine:
     def __init__(self):
@@ -28,31 +23,22 @@ class StateMachine:
 
     def execute(self, input, args):
         if self.state not in self.states:
-            raise FSMError('Invalid state: %s' % self.state)
-
+            raise FSMError("invalid state: %s" % self.state)
         state = self.states[self.state]
-
         if input in state:
             newstate, action = state[input]
             if action is not None:
-                try:
-                    action(self.state, input, args)
-                except RestartError, restartto:
-                    self.state = restartto
-                    return
+                action(self.state, input, args)
             self.state = newstate
         else:
             if None in state:
                 newstate, action = state[None]
                 if action is not None:
-                    try:
-                        action(self.state, input, args)
-                    except RestartError, restartto:
-                        self.state = restartto
-                        return
+                    action(self.state, input, args)
                 self.state = newstate
             else:
-                raise TransitionError(self.state, input)
+                raise TransitionError, 'input not recognized: %s:%s',\
+                    (self.inp, self.curr)
 
     def start(self, state):
         self.state = state
