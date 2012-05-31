@@ -278,7 +278,7 @@ function setPreference(key, val) {
 
     function queueDownload(href, wait) {
         var tokens = parseUri(href);
-        if (regex.valid_uri.test(href) && /^https?|ftp$/.test(tokens.protocol) && tokens.domain.length && tokens.fileName.length) {
+//        if (regex.valid_uri.test(href) && /^https?|ftp$/.test(tokens.protocol) && tokens.domain.length && tokens.fileName.length) {
             var request = new XMLHttpRequest();
             request.open('HEAD', href, true);
             request.onreadystatechange = function() {
@@ -289,8 +289,8 @@ function setPreference(key, val) {
                 }
             }
             request.send();
-        }
-        else console.log('error: invalid request:', href);
+//        }
+//        else console.log('error: invalid request:', href);
     }
 
     window['Background'] = {
