@@ -1,5 +1,5 @@
 BASE FRAMING PROTOCOL, http://tools.ietf.org/html/rfc6455#section-5.2
----------------------
+----
 ws-frame                = frame-fin           ; 1 bit in length
                           frame-rsv1          ; 1 bit in length
                           frame-rsv2          ; 1 bit in length
@@ -93,7 +93,7 @@ frame-unmasked-application-data = *( %x00-FF )
 
 
 A brief, Metalink Document that describes a single file:
---------------------------------------------------------
+----
 <?xml version="1.0" encoding="UTF-8"?>
 <metalink xmlns="urn:ietf:params:xml:ns:metalink">
     <file name="example.ext">
@@ -106,7 +106,7 @@ A brief, Metalink Document that describes a single file:
 
 
 A more extensive Metalink Document that describes two files:
-------------------------------------------------------------
+----
 <?xml version="1.0" encoding="UTF-8"?>
 <metalink xmlns="urn:ietf:params:xml:ns:metalink">
     <published>2009-05-15T12:23:23Z</published>

@@ -7,7 +7,6 @@ class Daemon:
     """
     A generic daemon class.
     See also: http://www.jejik.com/articles/2007/02/a_simple_unix_linux_daemon_in_python/
-    Usage: subclass the Daemon class and override the run() method
     """
     def __init__(self, pidfile, stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
         self.stdin = stdin
@@ -16,11 +15,6 @@ class Daemon:
         self.pidfile = pidfile
 
     def daemonize(self):
-        """
-        do the UNIX double-fork magic, see Stevens' "Advanced
-        Programming in the UNIX Environment" for details (ISBN 0201563177)
-        http://www.erlenstar.demon.co.uk/unix/faq_2.html#SEC16
-        """
         try:
             pid = os.fork()
             if pid > 0:
@@ -64,9 +58,6 @@ class Daemon:
         os.remove(self.pidfile)
 
     def start(self):
-        """
-        Start the daemon
-        """
         # Check for a pidfile to see if the daemon already runs
         try:
             pf = file(self.pidfile,'r')
@@ -85,9 +76,6 @@ class Daemon:
         self.run()
 
     def stop(self):
-        """
-        Stop the daemon
-        """
         # Get the pid from the pidfile
         try:
             pf = file(self.pidfile,'r')
@@ -116,9 +104,6 @@ class Daemon:
                 sys.exit(1)
 
     def status(self):
-        """
-        Assume the daemon is running if the pid file exist
-        """
         # Get the pid from the pidfile
         try:
             pf = file(self.pidfile,'r')
@@ -135,14 +120,30 @@ class Daemon:
         sys.stdout.write(message)
 
     def restart(self):
-        """
-        Restart the daemon
-        """
         self.stop()
         self.start()
 
     def run(self):
-        """
-        You should override this method when you subclass Daemon. It will be called after the process has been
-        daemonized by start() or restart().
-        """
+        pass
+
+
+if __name__ == "__main__":
+    from server import run
+    daemon = Daemon(pidfile='/tmp/pyaxelws.pid', stdout='/tmp/pyaxelws.log')
+    daemon.run = run
+	if len(sys.argv) == 2:
+		if 'start' == sys.argv[1]:
+			daemon.start()
+		elif 'stop' == sys.argv[1]:
+			daemon.stop()
+		elif 'status' == sys.argv[1]:
+			daemon.status()
+		elif 'restart' == sys.argv[1]:
+			daemon.restart()
+		else:
+			print "Unknown command"
+			sys.exit(2)
+		sys.exit(0)
+	else:
+		print "usage: %s start|stop|status|restart" % sys.argv[0]
+		sys.exit(2)
