@@ -211,9 +211,6 @@ Panel.prototype = {
             this.showIndicators(true);
         }
 
-        labels.percent.innerHTML = done ? '' : state.percentage + '% of&nbsp;';
-        labels.rate.innerHTML = '&nbsp;-&nbsp;' + state.speed + 'b/s&nbsp;';
-
         // draw pie progress indicator
         if (idle || active) {
             var pie = Indicators.Pie;
@@ -224,9 +221,12 @@ Panel.prototype = {
             canvas.lineTo(pie.centerX, pie.centerY);
             canvas.fill();
             canvas.closePath();
+            labels.percent.innerHTML = done ? '' : state.percentage + '% of&nbsp;';
+            labels.rate.innerHTML = '&nbsp;-&nbsp;' + state.speed + 'b/s&nbsp;';
         }
         else if (inactive || done) {
             this.showIndicators(false);
+            labels.percent.innerHTML = '';
             labels.rate.innerHTML = '';
         }
 
@@ -244,7 +244,6 @@ Panel.prototype = {
                 labels.progress.style.width = Indicators.Bar.width + 'px';
             }
         }
-
         if (this.progress_bars) {
             if (done || inactive) {
                 this.progress_bars.forEach(function(e, i) {

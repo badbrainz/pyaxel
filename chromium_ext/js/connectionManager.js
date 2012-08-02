@@ -76,7 +76,7 @@ ConnectionManager.onmsgevent = function(sender, response) {
 
     case MessageEvent.BAD_REQUEST:
     case MessageEvent.ERROR:
-        console.log(response.data);
+        console.log('server response:', response.data);
         if (download) {
             download.status = DownloadStatus.CANCELLED;
             DownloadManager.jobCompleted(download);
@@ -97,14 +97,14 @@ ConnectionManager.onmsgevent = function(sender, response) {
         ConnectionManager.assignOrDisconnect(sender);
         break;
 
+    case MessageEvent.STOPPED:
+        download.status = DownloadStatus.PAUSED;
+        break;
+
     case MessageEvent.END:
         download.status = DownloadStatus.COMPLETE;
         DownloadManager.jobCompleted(download);
         ConnectionManager.assignOrDisconnect(sender);
-        break;
-
-    case MessageEvent.STOPPED:
-        download.status = DownloadStatus.PAUSED;
         break;
     }
 

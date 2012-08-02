@@ -155,12 +155,19 @@ Animation.prototype.stop = function() {
 
 function initAnim() {
     // python
-    DownloadBadge.backimg = document.getElementById('python');
+    DownloadBadge.backimg = new Image(19, 19);
+    DownloadBadge.backimg.src = 'images/19.png';
+//    DownloadBadge.backimg = document.getElementById('python');
 
     // bits
-    DownloadBadge.foreimg = document.getElementById('bits');
+//    DownloadBadge.foreimg = document.getElementById('bits');
+    DownloadBadge.foreimg = new Image(38, 10);
+    DownloadBadge.foreimg.src = 'images/bits.png';
 
-    canvas = document.getElementById('canvas');
+//    canvas = document.getElementById('canvas');
+    canvas = document.createElement('canvas');
+    canvas.width = 19;
+    canvas.height = 19;
     context = canvas.getContext('2d');
     animation = new Animation(120, 1700, DownloadBadge);
 }
@@ -227,7 +234,7 @@ function setPreference(key, val) {
 
     var CommandHandler = {
         'add': function(arg) {
-            queueDownload(arg);
+            DownloadManager.addJob(arg);
         },
         'pause': function(arg) {
             DownloadManager.pauseJob(arg);
@@ -276,23 +283,6 @@ function setPreference(key, val) {
         delete ports[port.sender.tab.id];
     }
 
-    function queueDownload(href, wait) {
-        var tokens = parseUri(href);
-//        if (regex.valid_uri.test(href) && /^https?|ftp$/.test(tokens.protocol) && tokens.domain.length && tokens.fileName.length) {
-            var request = new XMLHttpRequest();
-            request.open('HEAD', href, true);
-            request.onreadystatechange = function() {
-                if (request.readyState == XMLHttpRequest.DONE) {
-                    if (request.status == 200) {
-                        DownloadManager.addJob(href, wait);
-                    }
-                }
-            }
-            request.send();
-//        }
-//        else console.log('error: invalid request:', href);
-    }
-
     window['Background'] = {
         notify: function(list, reset) {
             var msg = {
@@ -326,7 +316,7 @@ function setPreference(key, val) {
         'title': 'Download link',
         'contexts': ['link'],
         'onclick': function(info, tab) {
-            queueDownload(info.linkUrl);
+            DownloadManager.addJob(info.linkUrl);
         }
     });
 
@@ -335,7 +325,7 @@ function setPreference(key, val) {
         'title': 'Queue link',
         'contexts': ['link'],
         'onclick': function(info, tab) {
-            queueDownload(info.linkUrl, true);
+            DownloadManager.addJob(info.linkUrl, true);
         }
     });
 

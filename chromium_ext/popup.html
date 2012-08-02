@@ -9,19 +9,7 @@ span {padding-left: 5px}
 .menuitem-decor {text-shadow:1px 1px 1px rgba(0,0,0,0.18)}
 .menuitem:hover {background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,#f6f8f9), color-stop(50%,#e5ebee), color-stop(51%,#d7dee3), color-stop(100%,#f5f7f9));border: solid 1px #bcd;cursor:pointer}
 </style>
-<script>
-var wnd = window;
-document.addEventListener("DOMContentLoaded", function () {
-document.getElementById("downloads").addEventListener("click", function() {
-wnd.close();
-chrome.extension.getBackgroundPage().displayPage("downloads.html");
-}, false);
-document.getElementById("preferences").addEventListener("click", function() {
-wnd.close();
-chrome.extension.getBackgroundPage().displayPage("settings.html");
-}, false);
-}, false);
-</script>
+<script src="js/popup.js"></script>
 </head>
 <body>
 <div class="menuitem flex" id="downloads"><img src="../images/dbase.png" width=16 height=16 /><span>Downloads</span></div>
