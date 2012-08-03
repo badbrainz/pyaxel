@@ -1,3 +1,8 @@
+'''two bug fixes (wormboy):
+- line 113, incorrect exception name
+- line 126-127, possible race condition
+'''
+
 ## {{{ http://code.activestate.com/recipes/502291/ (r4)
 '''
 Yet another thread pool module.
@@ -105,7 +110,7 @@ class ThreadPool(object):
         'Tell C{n} worker threads to quit after they finish with their current job.'
         for _ in xrange(n):
             try: self._workers.pop().dismissed = True
-            except KeyError: break
+            except IndexError: break
 
     @synchronized
     def addJob(self, job, timeout=None):
@@ -118,8 +123,8 @@ class ThreadPool(object):
             immediately if the queue is full.
         '''
         key = job.key
-        self._unassignedJobs.put(job, timeout is None or timeout>0, timeout)
         self._unassignedKey2Job[key] = self._activeKey2Job[key] = job
+        self._unassignedJobs.put(job, timeout is None or timeout>0, timeout)
         _log.debug('Added job %r to the input queue' % key)
 
     @synchronized
