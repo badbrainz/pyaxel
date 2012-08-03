@@ -1,4 +1,5 @@
 ## {{{ http://code.activestate.com/recipes/52215/ (r1)
+import sys
 import traceback
 def backtrace(debug_locals=True):
     tb = sys.exc_info()[2]
