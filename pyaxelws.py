@@ -9,7 +9,8 @@ import contextlib
 from optparse import OptionParser
 
 import pyaxel
-import recipes
+import threadpool
+import debug
 import websocket
 import statemachine
 
@@ -52,7 +53,7 @@ def general_configuration(options={}):
 
     conf = Config()
 #    conf.nworkers = 20
-#    conf.pool = recipes.ThreadPool(num_workers=conf.nworkers)
+#    conf.pool = threadpool.ThreadPool(num_workers=conf.nworkers)
     conf.download_path = options.get("download_path") or pyaxel.PYAXELWS_PATH
     conf.num_connections = options.get("num_connections") or 1
     conf.max_speed = options.get("max_speed") or 0
@@ -217,13 +218,13 @@ class Connection:
         for i in range(4, 0, -1):
             bucket = TokenBucket(100 * 1024, 25 * 1024)
             self.buckets.append(bucket)
-        self.thread_pool = recipes.ThreadPool(num_workers=0)
+        self.thread_pool = threadpool.ThreadPool(num_workers=0)
         self.writer = fd
 
     def add_job(self, job):
         chunk = Chunk()
         self.chunks.append(chunk)
-        self.thread_pool.addJob(recipes.JobRequest(chunk, [job, chunk]))
+        self.thread_pool.addJob(threadpool.JobRequest(chunk, [job, chunk]))
         self.thread_pool.addWorkers(1)
 
     def tick(self):
@@ -245,10 +246,10 @@ class Connection:
                 print 'fucked url', job.key
                 self.destroy()
             except Exception, e:
-#                recipes.backtrace()
+#                debug.backtrace()
                 print e
 #                print 're-assigning job', job.key
-                recipes.backtrace()
+                debug.backtrace()
 #                thread_pool.addJob(job)
 
     def sleep(self, t):
@@ -287,11 +288,11 @@ class ChannelDispatcher:
             msg = json.loads(data)
             self.state_manager.execute(msg["cmd"], msg.get("arg"))
         except (IOError, statemachine.TransitionError), e:
-            recipes.backtrace()
+            debug.backtrace()
             self.close_connection()
             self.post_message({"event":BAD_REQUEST, "data":str(e)})
         except:
-            recipes.backtrace()
+            debug.backtrace()
             self.close_connection()
             self.post_message({"event":BAD_REQUEST,
                 "data":"internal server error"})
@@ -571,7 +572,7 @@ def run(options={}):
     except KeyboardInterrupt:
         pass
     except:
-        recipes.backtrace()
+        debug.backtrace()
     port.stop_service()
     sys.stdout.flush()
 
