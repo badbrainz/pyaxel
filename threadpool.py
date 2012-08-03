@@ -16,7 +16,7 @@ the computed results, a L{generator <ThreadPool.iterProcessedJobs>} is used for
 popping the processed jobs from the output queue and yielding them back to the
 caller. The processed jobs encapsulate the computed result (or raised exception)
 and can be used transparently by the calling thread, as if the computation didn't
-take place in a different thread. This is more flexible than the callback-based
+take place in a different thread. This is more flexible that the callback-based
 approach since it gives full control to the caller of when to ask for a result,
 how long to wait for it and what to do with it once it is fetched.
 
@@ -79,8 +79,8 @@ class ThreadPool(object):
 
         @param num_workers: The number of worker threads to start initially.
         @param input_queue_size: If a positive integer, it's the maximum number
-            of unassigned jobs. The thread pool blocks when the queue is full and
-            a new job is submitted.
+            of unassigned jobs. The thread pool blocks when the queue is full a
+            new job is submitted.
         @param output_queue_size: If a positive integer, it's the maximum number
             of completed jobs waiting to be fetched. The thread pool blocks when
             the queue is full and a job is completed.
@@ -105,13 +105,7 @@ class ThreadPool(object):
         'Tell C{n} worker threads to quit after they finish with their current job.'
         for _ in xrange(n):
             try: self._workers.pop().dismissed = True
-            except IndexError: break
-
-    @synchronized
-    def dismissAllWorkers(self):
-        while True:
-            try: self._workers.pop().dismissed = True
-            except IndexError: break
+            except KeyError: break
 
     @synchronized
     def addJob(self, job, timeout=None):
@@ -124,8 +118,8 @@ class ThreadPool(object):
             immediately if the queue is full.
         '''
         key = job.key
-        self._unassignedKey2Job[key] = self._activeKey2Job[key] = job
         self._unassignedJobs.put(job, timeout is None or timeout>0, timeout)
+        self._unassignedKey2Job[key] = self._activeKey2Job[key] = job
         _log.debug('Added job %r to the input queue' % key)
 
     @synchronized
@@ -307,4 +301,4 @@ class Worker(threading.Thread):
             # thread blocks here if outputQueue is full
             self._outputQueue.put(job)
             _log.debug('Added job request %r to the output queue' % job.key)
-## end of http://code.activestate.com/recipes/52215/ }}}
+## end of http://code.activestate.com/recipes/502291/ }}}
