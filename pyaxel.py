@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 ''' TODO
     * implement rate limiting
     * handle network error:
