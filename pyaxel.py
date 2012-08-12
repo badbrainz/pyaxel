@@ -10,6 +10,7 @@
     * conn_setup sets Range header
     * deprecated http_size()
 '''
+
 import contextlib
 import threading
 import httplib
@@ -22,7 +23,6 @@ import stat
 import sys
 import os
 
-import pdb
 import StringIO
 import ConfigParser
 
@@ -56,7 +56,6 @@ STD_HEADERS = {
 }
 
 dbg_lvl = 0
-socket.setdefaulttimeout(5)
 
 
 class conf_t():
@@ -82,14 +81,11 @@ def conf_init(conf):
     conf.search_amount = 15
     conf.search_top = 3
 
-#    if not conf_load(conf, PYAXEL_CONFIG):
+#    if not conf_load(conf, PYAXEL_PATH + PYAXEL_CONFIG):
 #        return 0
 
     return 1
 
-
-def get_config_info(key):
-    return None
 
 class CfgParser(ConfigParser.RawConfigParser):
 
@@ -173,9 +169,7 @@ def pyaxel_new(conf, count, url):
         if conf.max_speed / conf.buffer_size < 1:
             pyaxel_message(pyaxel, "Buffer resized for this speed.")
             conf.buffer_size = conf.max_speed
-        pyaxel.delay_time = 1000000 / conf.max_speed * \
-                                      conf.buffer_size * \
-                                      conf.num_connections
+        pyaxel.delay_time = 1000000 / conf.max_speed * conf.buffer_size * conf.num_connections
     #pyaxel.buffer = ''
 
     pyaxel.url = deque()
@@ -238,13 +232,13 @@ def pyaxel_open(pyaxel):
                 if pyaxel.conf.num_connections > len(pyaxel.conn):
                     pyaxel.conn.extend([conn_t() for i in xrange(pyaxel.conf.num_connections - len(pyaxel.conn))])
                 elif pyaxel.conf.num_connections < len(pyaxel.conn):
-                    pyaxel.conn = pyaxel.conn[:pyaxel.conf.num_connections-1]
+                    pyaxel.conn = pyaxel.conn[:pyaxel.conf.num_connections]
 
                 pyaxel_divide(pyaxel)
 
                 pyaxel.bytes_done = st.get('bytes_done', 0)
                 for conn, byte in zip(pyaxel.conn, st.get('current_byte', 0)):
-                    conn.current_byte = conn.current_byte + byte
+                    conn.current_byte = byte
 
                 pyaxel_message(pyaxel, 'State file found: %d bytes downloaded, %d remaining' % \
                               (pyaxel.bytes_done, pyaxel.size - pyaxel.bytes_done))
@@ -300,31 +294,37 @@ def pyaxel_do(pyaxel):
     if all(conn.enabled < 1 for conn in pyaxel.conn):
         time.sleep(1)
 
-    for i, conn in enumerate(pyaxel.conn):
+    for conn in pyaxel.conn:
         if conn.enabled == 1:
             try:
                 conn.last_transfer = time.time()
                 fetch_size = min(conn.last_byte + 1 - conn.current_byte, pyaxel.conf.buffer_size)
-                data = conn.http.fd.read(fetch_size)
+                try:
+                    data = conn.http.fd.read(fetch_size)
+                except socket.error:
+                    pyaxel_message(pyaxel, 'Error on connection %d' % pyaxel.conn.index(conn))
+                    conn_disconnect(conn)
+                    conn.enabled = -1
+                    continue
                 size = len(data)
                 if size == 0:
                     if conn.current_byte < conn.last_byte:# and pyaxel.size != INT_MAX:
-                        pyaxel_message(pyaxel, 'Connection %d unexpectedly closed.' % i)
+                        pyaxel_message(pyaxel, 'Connection %d unexpectedly closed.' % pyaxel.conn.index(conn))
                     else:
-                        pyaxel_message(pyaxel, 'Connection %d finished.' % i)
+                        pyaxel_message(pyaxel, 'Connection %d finished.' % pyaxel.conn.index(conn))
                     if not pyaxel.conn[0].supported:
                         pyaxel.ready = 1
                     conn.enabled = 0
                     conn_disconnect(conn)
                     continue
                 if size != fetch_size:
-                    pyaxel_message(pyaxel, 'Error on connection %d.' % i)
+                    pyaxel_message(pyaxel, 'Error on connection %d.' % pyaxel.conn.index(conn))
                     conn.enabled = -1
                     conn_disconnect(conn)
                     continue
                 remaining = conn.last_byte + 1 - conn.current_byte + 1
                 if remaining < size:
-                    pyaxel_message(pyaxel, 'Connection %d finished.' % i)
+                    pyaxel_message(pyaxel, 'Connection %d finished.' % pyaxel.conn.index(conn))
                     conn.enabled = 0
                     conn_disconnect(conn)
                     size = remaining
@@ -337,8 +337,8 @@ def pyaxel_do(pyaxel):
                     return
                 conn.current_byte += size
                 pyaxel.bytes_done += size
-            except Exception, e:
-                pyaxel_message(pyaxel, 'Unexpected error on connection %d: %s' % (i, e))
+            except Exception, err:
+                pyaxel_message(pyaxel, 'Unexpected error on connection %d: %s' % (pyaxel.conn.index(conn), err))
                 conn_disconnect(conn)
                 conn.enabled = -1
 #                pdb.set_trace()
@@ -347,11 +347,11 @@ def pyaxel_do(pyaxel):
         return
 
     # TODO limit reconnect attempt
-    for i, conn in enumerate(pyaxel.conn):
+    for conn in pyaxel.conn:
         if conn.enabled == -1 and conn.current_byte < conn.last_byte:
             if conn.state == 0:
                 conn.setup_thread.join()
-                pyaxel_message(pyaxel, 'Restarting connection %d.' % i)
+                pyaxel_message(pyaxel, 'Restarting connection %d.' % pyaxel.conn.index(conn))
                 # TODO try another URL
                 conn_set(conn, pyaxel.url[0])
                 conn.state = 1
@@ -373,7 +373,7 @@ def pyaxel_do(pyaxel):
 def pyaxel_divide(pyaxel):
     pyaxel.conn[0].current_byte = 0
     pyaxel.conn[0].last_byte = pyaxel.size / pyaxel.conf.num_connections - 1
-    for i in xrange(1, len(pyaxel.conn)):
+    for i in xrange(1, pyaxel.conf.num_connections):
         pyaxel.conn[i].current_byte = pyaxel.conn[i-1].last_byte + 1
         pyaxel.conn[i].last_byte = pyaxel.conn[i].current_byte + pyaxel.size / pyaxel.conf.num_connections
     pyaxel.conn[pyaxel.conf.num_connections-1].last_byte = pyaxel.size - 1
@@ -555,6 +555,8 @@ def conn_info(conn):
     return 1
 
 def conn_setup(conn):
+    # TODO add conn headerstry
+    # TODO use conf_t
     if not conn.http.fd:
         if not conn_init(conn):
             return 0
@@ -563,15 +565,11 @@ def conn_setup(conn):
 #    conn.http.first_byte = conn.current_byte
 #    conn.http.last_byte = conn.last_byte
     http_setup(conn.http, s)
-    http_addheader(conn.http, 'User-Agent', STD_HEADERS['User-Agent']) # TODO use conf_t
+    http_addheader(conn.http, 'User-Agent', STD_HEADERS['User-Agent'])
     if conn.last_byte:
         http_addheader(conn.http, 'Range', 'bytes=%d-%d' % (conn.current_byte, conn.last_byte))
     else:
         http_addheader(conn.http, 'Range', 'bytes=%d-' % conn.current_byte)
-#    pdb.set_trace()
-    # TODO add conn headerstry:
-    #    for( i = 0; i < conn->conf->add_header_count; i++)
-    #       http_addheader( conn->http, "%s", conn->conf->add_header[i] );
 
     return 1
 
@@ -637,7 +635,7 @@ def http_header(http, name):
 
 def http_exec(http):
     try:
-        response = http.opener.open(http.request)
+        response = http.opener.open(http.request, timeout=20)
         http.headers = response.info()
         http.headers['Location'] = response.geturl()
         http.status = response.code
@@ -672,10 +670,11 @@ def setup_thread(conn):
             conn.last_transfer = time.time()
             conn.state = 0
             conn.enabled = 1
-            return
+            return 1
 
     conn_disconnect(conn)
     conn.state = 0
+    return 0
 
 
 def main(argv=None):
@@ -704,7 +703,6 @@ def main(argv=None):
     if len(args) != 1:
         parser.print_help()
     else:
-        import bdb
         try:
             # TODO search mirrors
             url = args[0]
@@ -747,24 +745,18 @@ def main(argv=None):
             pyaxel_start(axel)
             print_messages(axel)
 
-            # for debugging/indicator
-            axel.start_byte = axel.bytes_done
-
             while not axel.ready:
                 pyaxel_do(axel)
                 if axel.message:
                     print_messages(axel)
 
             # TODO print elapsed time
+            pyaxel_close(axel)
         except KeyboardInterrupt:
             print
-        except bdb.BdbQuit:
-            pass
+            return 1
         except:
-            import recipes
-            recipes.backtrace()
-        finally:
-            pyaxel_close(axel)
+            return 1
 
         return 0
 
