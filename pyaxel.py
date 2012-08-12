@@ -7,32 +7,33 @@
 
     CHANGES
     * renamed http_connect to http_init
+    * renamed conn.dir to conn.directory
+    * renamed conn.file to conn.file_name
     * conn_setup sets Range header
     * deprecated http_size()
 '''
 
+import ConfigParser
 import contextlib
-import threading
 import httplib
+import os
+import socket
+import stat
+import StringIO
+import sys
+import threading
+import time
 import urllib
 import urllib2
 import urlparse
-import socket
-import time
-import stat
-import sys
-import os
-
-import StringIO
-import ConfigParser
-
-from collections import deque
-#from ConfigParser import SafeConfigParser
 
 try:
     import cPickle as pickle
 except:
     import pickle
+
+from collections import deque
+#from ConfigParser import SafeConfigParser
 
 PYAXEL_VERSION = "1.0.0"
 PYAXEL_SVN = "r"
@@ -117,6 +118,7 @@ class CfgParser(ConfigParser.RawConfigParser):
         with open(filename, 'w') as fd:
             self.write(fd)
 
+
 def conf_load(conf, path):
     parser = CfgParser()
     parser.read(path)
@@ -143,22 +145,21 @@ def conf_load(conf, path):
 
 
 class pyaxel_t:
-    def __init__(self):
-        #self.buffer = ''
-        self.bytes_done = 0
-        self.conf = None
-        self.conn = []
-        self.delay_time = 0
-        self.file_name = ''
-        self.message = []
-        self.next_state = 0
-        self.outfd = -1
-        self.ready = 0
-        self.save_state_interval = -1
-        self.size = 0
-        self.start_byte = 0
-        self.start_time = None
-        self.url = ''
+    #buffer = ''
+    bytes_done = 0
+    conf = None
+    conn = []
+    delay_time = 0
+    file_name = ''
+    message = []
+    next_state = 0
+    outfd = -1
+    ready = 0
+    save_state_interval = -1
+    size = 0
+    start_byte = 0
+    start_time = None
+    url = ''
 
 
 def pyaxel_new(conf, count, url):
@@ -196,12 +197,12 @@ def pyaxel_new(conf, count, url):
         pyaxel.ready = -1
         return pyaxel
 
-#    pyaxel.file_name = http_decode(pyaxel.conn[0].disposition or pyaxel.conn[0].file)
-    pyaxel.file_name = pyaxel.conn[0].disposition or pyaxel.conn[0].file
+#    pyaxel.file_name = http_decode(pyaxel.conn[0].disposition or pyaxel.conn[0].file_name)
+    pyaxel.file_name = pyaxel.conn[0].disposition or pyaxel.conn[0].file_name
     pyaxel.file_name = pyaxel.file_name.replace('/', '_')
     pyaxel.file_name = http_encode(pyaxel.file_name)
     # fuck index pages
-    #pyaxel.file_name = http_decode(pyaxel.conn[0].file) or conf.default_file_name
+    #pyaxel.file_name = http_decode(pyaxel.conn[0].file_name) or conf.default_file_name
 
     s = conn_url(pyaxel.conn[0])
     pyaxel.url[0] = s
@@ -240,7 +241,7 @@ def pyaxel_open(pyaxel):
                 for conn, byte in zip(pyaxel.conn, st.get('current_byte', 0)):
                     conn.current_byte = byte
 
-                pyaxel_message(pyaxel, 'State file found: %d bytes downloaded, %d remaining' % \
+                pyaxel_message(pyaxel, 'State file found: %d bytes downloaded, %d remaining' %
                               (pyaxel.bytes_done, pyaxel.size - pyaxel.bytes_done))
 
                 try:
@@ -341,7 +342,6 @@ def pyaxel_do(pyaxel):
                 pyaxel_message(pyaxel, 'Unexpected error on connection %d: %s' % (pyaxel.conn.index(conn), err))
                 conn_disconnect(conn)
                 conn.enabled = -1
-#                pdb.set_trace()
 
     if pyaxel.ready:
         return
@@ -426,29 +426,31 @@ def pyaxel_save(pyaxel):
 
 
 class conn_t:
+    conf = None
+    current_byte = None
+    directory = ''
+    disposition = None
+    enabled = -1
+    file_name = ''
+    host = ''
+    http = None
+    last_byte = None
+    local_if = ''
+    message = ''
+    path = ''
+    port = None
+    proto = -1
+    pwd = ''
+    retries = 0
+    scheme = ''
+    setup_thread = None
+    size = 0
+    state = -1
+    supported = 0
+    usr = ''
+
     def __init__(self):
-        self.conf = None
-        self.current_byte = None
-        self.dir = ''
-        self.disposition = None
-        self.enabled = -1
-        self.file = ''
-        self.host = ''
         self.http = http_t()
-        self.last_byte = None
-        self.local_if = ''
-        self.message = ''
-        self.path = ''
-        self.port = None
-        self.proto = -1
-        self.pwd = ''
-        self.retries = 0
-        self.scheme = ''
-        self.setup_thread = None
-        self.size = 0
-        self.state = -1
-        self.supported = 0
-        self.usr = ''
 
 
 def conn_set(conn, url):
@@ -477,14 +479,14 @@ def conn_set(conn, url):
     if not parts.path.startswith('/'):
         return 0
     else:
-        conn.dir, conn.file = parts.path.rsplit('/', 1)
-        conn.dir += '/'
+        conn.directory, conn.file_name = parts.path.rsplit('/', 1)
+        conn.directory += '/'
         if conn.proto == PROTO_HTTP:
-            conn.dir = http_decode(conn.dir)
-        if not conn.file:
+            conn.directory = http_decode(conn.directory)
+        if not conn.file_name:
             return 0
         if parts.query:
-            conn.file += '?%s' % parts.query
+            conn.file_name += '?%s' % parts.query
 
     conn.usr = parts.username
     conn.pwd = parts.password
@@ -498,8 +500,7 @@ def conn_init(conn):
 
     if conn.proto == PROTO_HTTP:
         conn.http.local_if = conn.local_if
-        if not http_init(conn.http, conn.proto, conn.host, proxy, conn.port,
-            conn.usr, conn.pwd):
+        if not http_init(conn.http, conn.proto, conn.host, proxy, conn.port, conn.usr, conn.pwd):
             conn.message = conn.http.headers
             conn_disconnect(conn)
             return 0
@@ -580,26 +581,25 @@ def conn_exec(conn):
     return conn.http.status / 100 == 2
 
 def conn_url(conn):
-    return '%s://%s%s%s' % (conn.scheme, conn.host, conn.dir, conn.file)
+    return '%s://%s%s%s' % (conn.scheme, conn.host, conn.directory, conn.file_name)
 
 def conn_disconnect(conn):
     http_disconnect(conn.http)
 
 
 class http_t:
-    def __init__(self):
-        self.auth = ''
-        self.fd = None
-#        self.first_byte = None
-        self.headers = ''
-        self.host = ''
-        self.local_if = None
-#        self.last_byte = None
-        self.opener = None
-        self.proto = None
-        self.proxy = None
-        self.request = ''
-        self.status = None
+    auth = ''
+    fd = None
+#    first_byte = None
+    headers = ''
+    host = ''
+    local_if = None
+#    last_byte = None
+    opener = None
+    proto = None
+    proxy = None
+    request = ''
+    status = None
 
 
 def http_connect(http, proto, host, proxy=None, port=80, usr=None, pwd=None):
@@ -749,6 +749,8 @@ def main(argv=None):
                 pyaxel_do(axel)
                 if axel.message:
                     print_messages(axel)
+                sys.stdout.write('Downloaded [%d%%]\r' % (axel.bytes_done * 100 / axel.size))
+                sys.stdout.flush()
 
             # TODO print elapsed time
             pyaxel_close(axel)
@@ -756,6 +758,7 @@ def main(argv=None):
             print
             return 1
         except:
+            print 'Unknown error!'
             return 1
 
         return 0
