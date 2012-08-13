@@ -1,9 +1,18 @@
-import pdb
+#!/usr/bin/env python
+
+import sys
 import time
 import threading
+import socket
+import Queue
 
 import threadpool
 import pyaxel as pyaxellib
+
+try:
+    import cPickle as pickle
+except:
+    import pickle
 
 setup_threadpool = threadpool.ThreadPool(4)
 
@@ -11,17 +20,14 @@ setup_threadpool = threadpool.ThreadPool(4)
 class fakefile_c:
     def __init__(self, outfd):
         self.outfd = outfd
-        self.lock = threading.Lock()
-        self.offset = None
+        self.queue = Queue.Queue(maxsize=1)
 
     def write(self, data):
-        self.outfd.seek(self.offset)
+        self.outfd.seek(self.queue.get())
         self.outfd.write(data)
-        self.lock.release()
 
     def seek(self, offset):
-        self.lock.acquire()
-        self.offset = offset
+        self.queue.put(offset, block=True)
 
     def close(self):
         self.outfd.close()
@@ -35,13 +41,11 @@ def pyaxel_open(pyaxel):
     pyaxel.outfd = fakefile_c(pyaxel.outfd)
 
     for conn in pyaxel.conn:
-        conn.bytes_read = 0
-#        conn.start_byte = conn.current_byte
+        conn.first_byte = conn.current_byte
 
     return 1
 
 def pyaxel_start(pyaxel):
-    # TODO assign mirrors
     for i, conn in enumerate(pyaxel.conn):
         pyaxellib.conn_set(conn, pyaxel.url[0])
         conn.conf = pyaxel.conf
@@ -53,90 +57,204 @@ def pyaxel_start(pyaxel):
     for conn in pyaxel.conn:
         if conn.current_byte <= conn.last_byte:
             conn.state = 1
-            setup_threadpool.addJob(threadpool.JobRequest(pyaxellib.setup_thread, [conn]))
+            conn.reconnect_count = 0
+            setup_threadpool.addJob(threadpool.JobRequest(setup_thread, [conn]))
             conn.last_transfer = time.time()
 
     pyaxel.start_time = time.time()
-    pyaxel.ready = 0
+    pyaxel.start_byte = pyaxel.bytes_done
+    pyaxel.active_threads = len(pyaxel.conn)
+
+def pyaxel_run(pyaxel):
+    for conn in pyaxel.conn:
+        pyaxel_run2(pyaxel, conn)
+
+def pyaxel_run2(pyaxel, conn):
+    setup_threadpool.addJob(threadpool.JobRequest(download_thread, [pyaxel, conn]))
 
 def pyaxel_do(pyaxel):
-    # TODO tokenbucket
-    pyaxel.outfd.lock.acquire()
-    for conn in pyaxel.conn:
-        pyaxel.bytes_done += conn.bytes_read
-        conn.bytes_read = 0
-#    pyaxel.bytes_done += sum([conn.bytes_read for conn in pyaxel.conn])
     if time.time() > pyaxel.next_state:
-        pyaxellib.pyaxel_save(pyaxel)
+        pyaxel_save(pyaxel)
         pyaxel.next_state = time.time() + pyaxel.conf.save_state_interval
-    pyaxel.outfd.lock.release()
-#    print pyaxel.bytes_done , pyaxel.size
+
+    for job in setup_threadpool.iterProcessedJobs(0):
+        state, conn = job.result()
+        if state == -2:
+            pyaxellib.pyaxel_message(pyaxel, 'Write error!')
+            pyaxellib.conn_disconnect(conn)
+            pyaxel.active_threads -= 1
+        elif state == -1:
+            pyaxellib.conn_disconnect(conn)
+            if conn.state == 0 and conn.current_byte < conn.last_byte:
+                pyaxellib.pyaxel_message(pyaxel, 'Restarting connection %d.' % pyaxel.conn.index(conn))
+                if conn.reconnect_count > 5:
+                    pyaxellib.pyaxel_message(pyaxel, 'Error on connection %d: Too many reconnect attempts.' % pyaxel.conn.index(conn))
+                    pyaxel.active_threads -= 1
+                    continue
+                conn.reconnect_count += 1
+                pyaxellib.conn_set(conn, pyaxel.url[0])
+                conn.state = 1
+                setup_threadpool.addJob(threadpool.JobRequest(setup_thread, [conn]))
+                conn.last_transfer = time.time()
+            else:
+                pyaxellib.pyaxel_message(pyaxel, 'Error on connection %d.' % pyaxel.conn.index(conn))
+        elif state == 0:
+            if conn.current_byte < conn.last_byte:
+                pyaxellib.pyaxel_message(pyaxel, 'Connection %d unexpectedly closed.' % pyaxel.conn.index(conn))
+            else:
+                pyaxellib.pyaxel_message(pyaxel, 'Connection %d finished.' % pyaxel.conn.index(conn))
+            pyaxellib.conn_disconnect(conn)
+            pyaxel.active_threads -= 1
+        elif state == 1:
+            pyaxellib.pyaxel_message(pyaxel, 'Connection %d opened.' % pyaxel.conn.index(conn))
+            pyaxel_run2(pyaxel, conn)
+
+    pyaxel.bytes_done = pyaxel.start_byte + sum(map(lambda x: x.current_byte - x.first_byte, pyaxel.conn))
     if pyaxel.bytes_done == pyaxel.size:
         pyaxellib.pyaxel_message(pyaxel, 'Download complete.')
         pyaxel.ready = 1
 
-def pyaxel_run(pyaxel):
-    for i, conn in enumerate(pyaxel.conn):
-        setup_threadpool.addJob(threadpool.JobRequest(download_thread, [pyaxel, conn]))
+def pyaxel_save(pyaxel):
+    if not pyaxel.conn[0].supported:
+        return
 
-def pyaxel_join(pyaxel):
-    return
+    try:
+        with open('%s.st' % pyaxel.file_name, 'wb') as fd:
+            bytes = [conn.current_byte for conn in pyaxel.conn]
+            state = {
+                'num_connections': pyaxel.conf.num_connections,
+                'bytes_done': pyaxel.start_byte + sum([x - c.first_byte for x, c in zip(bytes, pyaxel.conn)]),
+                'current_byte': bytes
+            }
+            pickle.dump(state, fd)
+    except IOError:
+        pass
 
 def download_thread(pyaxel, conn):
-    while not pyaxel.ready:
-        if conn.enabled == -1:
-            time.sleep(1)
+    while conn.enabled == 1:
+        conn.last_transfer = time.time()
+        fetch_size = min(conn.last_byte + 1 - conn.current_byte, pyaxel.conf.buffer_size)
+        try:
+            data = conn.http.fd.read(fetch_size)
+        except socket.error:
+            return (-1, conn)
+        size = len(data)
+        if size == 0:
+            return (0, conn)
+        if size != fetch_size:
+            return (-1, conn)
+        try:
+            pyaxel.outfd.seek(conn.current_byte)
+            pyaxel.outfd.write(data)
+        except IOError:
+            return (-2, conn)
+        conn.current_byte += size
 
-        if not conn.enabled:
-            break
+    return (0, conn)
 
-        if conn.enabled == 1:
-            try:
-                conn.last_transfer = time.time()
-                fetch_size = min(conn.last_byte + 1 - conn.current_byte, pyaxel.conf.buffer_size)
-                data = conn.http.fd.read(fetch_size)
-                size = len(data)
-                if size == 0:
-                    if conn.current_byte < conn.last_byte:# and pyaxel.size != INT_MAX:
-                        pyaxellib.pyaxel_message(pyaxel, 'Connection %d unexpectedly closed.' % pyaxel.conn.index(conn))
-                    else:
-                        pyaxellib.pyaxel_message(pyaxel, 'Connection %d finished.' % pyaxel.conn.index(conn))
-#                    if not pyaxel.conn[0].supported:
-#                        pyaxel.ready = 1
-                    conn.enabled = 0
-                    pyaxellib.conn_disconnect(conn)
-                    break
-                if size != fetch_size:
-                    pyaxellib.pyaxel_message(pyaxel, 'Error on connection %d.' % pyaxel.conn.index(conn))
-                    conn.enabled = -1
-                    pyaxellib.conn_disconnect(conn)
-                    continue
-                try:
-                    pyaxel.outfd.seek(conn.current_byte)
-                    pyaxel.outfd.write(data)
-                except IOError:
-                    pyaxellib.pyaxel_message(pyaxel, 'Write error!')
-                    conn.enabled = 0
-                    pyaxellib.conn_disconnect(conn)
-#                    pyaxel.ready = -1
-                    return
-                conn.current_byte += size
-                conn.bytes_read += size
-            except Exception, e:
-                pyaxellib.pyaxel_message(pyaxel, 'Unexpected error on connection %d: %s' % (pyaxel.conn.index(conn), e))
-                conn.enabled = -1
-                pyaxellib.conn_disconnect(conn)
-                continue
+def setup_thread(conn):
+    if pyaxellib.conn_setup(conn):
+        conn.last_transfer = time.time()
+        if pyaxellib.conn_exec(conn):
+            conn.last_transfer = time.time()
+            conn.state = 0
+            conn.enabled = 1
+            return (1, conn)
 
-        if conn.enabled == -1 and conn.current_byte < conn.last_byte:
-            if conn.state == 0:
-                pyaxellib.pyaxel_message(pyaxel, 'Restarting connection %d.' % pyaxel.conn.index(conn))
-                # TODO try another URL
-                pyaxellib.conn_set(conn, pyaxel.url[0])
-                conn.state = 1
-                setup_threadpool.addJob(threadpool.JobRequest(pyaxellib.setup_thread, [conn]))
-                conn.last_transfer = time.time()
-            elif conn.state == 1:
-                if time.time() > conn.last_transfer + pyaxel.conf.reconnect_delay:
-                    pyaxellib.conn_disconnect(conn)
-                    conn.state = 0
+    pyaxellib.conn_disconnect(conn)
+    conn.state = 0
+    return (-1, conn)
+
+def main(argv=None):
+    import stat
+    import os
+
+    from optparse import OptionParser
+
+    if argv is None:
+        argv = sys.argv
+
+    parser = OptionParser(usage="Usage: %prog [options] url")
+    parser.add_option("-q", "--quiet", dest="verbose",
+                      default=False, action="store_true",
+                      help="leave stdout alone")
+    parser.add_option("-p", "--print", dest="http_debug",
+                      default=False, action="store_true",
+                      help="print HTTP info")
+    parser.add_option("-n", "--num-connections", dest="num_connections",
+                      type="int", default=1,
+                      help="specify maximum number of connections",
+                      metavar="x")
+    parser.add_option("-s", "--max-speed", dest="max_speed",
+                      type="int", default=0,
+                      help="specify maximum speed (bytes per second)",
+                      metavar="x")
+
+    (options, args) = parser.parse_args(argv[1:])
+
+    if len(args) != 1:
+        parser.print_help()
+    else:
+        # TODO search mirrors
+        try:
+            url = args[0]
+            conf = pyaxellib.conf_t()
+
+            pyaxellib.conf_init(conf)
+            if not pyaxellib.conf_load(conf, pyaxellib.PYAXEL_PATH + pyaxellib.PYAXEL_CONFIG):
+                return 1
+
+            for prop in options.__dict__:
+                    if not callable(options.__dict__[prop]):
+                        setattr(conf, prop, getattr(options, prop))
+
+            conf.verbose = bool(conf.verbose)
+            conf.http_debug = bool(conf.http_debug)
+            conf.num_connections = options.num_connections
+
+            axel = pyaxellib.pyaxel_new(conf, 0, url)
+            if axel.ready == -1:
+                pyaxellib.print_messages(axel)
+                return 1
+
+            pyaxellib.print_messages(axel)
+
+            # TODO check permissions, destination opt, etc.
+            if not bool(os.stat(os.getcwd()).st_mode & stat.S_IWUSR):
+                print 'Can\'t access protected directory: %s' % os.getcwd()
+                return 1
+#                if not os.access(axel.file_name, os.F_OK):
+#                    print 'Couldn\'t access %s' % axel.file_name
+#                    return 0
+#                if not os.access('%s.st' % axel.file_name, os.F_OK):
+#                    print 'Couldn\'t access %s.st' % axel.file_name
+#                    return 0
+
+            if not pyaxel_open(axel):
+                pyaxellib.print_messages(axel)
+                return 1
+
+            pyaxel_start(axel)
+            pyaxellib.print_messages(axel)
+
+            while axel.active_threads:
+                pyaxel_do(axel)
+                if axel.message:
+                    pyaxellib.print_messages(axel)
+                sys.stdout.write('Downloaded [%d%%]\r' % (axel.bytes_done * 100 / axel.size))
+                sys.stdout.flush()
+                time.sleep(1)
+
+            pyaxellib.pyaxel_close(axel)
+        except KeyboardInterrupt:
+            print
+            return 1
+        except:
+            import debug
+            debug.backtrace()
+            return 1
+
+        return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
