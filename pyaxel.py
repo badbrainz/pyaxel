@@ -221,7 +221,7 @@ def pyaxel_open(pyaxel):
 
     if not pyaxel.conn[0].supported:
         pyaxel_message(pyaxel, 'Server unsupported. Starting with one connection.')
-        pyaxel.num_connections = 1
+        pyaxel.conf.num_connections = 1
         pyaxel.conn = pyaxel.conn[:1]
         pyaxel_divide(pyaxel)
     else:
