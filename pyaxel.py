@@ -224,7 +224,7 @@ def pyaxel_open(pyaxel):
     else:
         try:
             with open('%s.st' % pyaxel.file_name, 'rb') as fd:
-                try
+                try:
                     st = pickle.load(fd)
                 except pickle.UnpicklingError:
                     pass

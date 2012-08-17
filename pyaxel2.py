@@ -109,7 +109,7 @@ def pyaxel_write(pyaxel, data):
 
 def pyaxel_close(pyaxel):
     del qfile_map[pyaxel.outfd]
-    pyaxellib.close(pyaxel)
+    pyaxellib.pyaxel_close(pyaxel)
 
 def pyaxel_save(pyaxel):
     if not pyaxel.conn[0].supported:
