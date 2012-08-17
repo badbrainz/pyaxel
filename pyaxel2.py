@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
+import Queue
+import os
+import socket
 import sys
 import time
 import threading
-import socket
-import Queue
 
 import threadpool
 import pyaxel as pyaxellib
@@ -15,22 +16,7 @@ except:
     import pickle
 
 setup_threadpool = threadpool.ThreadPool(4)
-
-
-class fakefile_c:
-    def __init__(self, outfd):
-        self.outfd = outfd
-        self.queue = Queue.Queue(maxsize=1)
-
-    def write(self, data):
-        self.outfd.seek(self.queue.get())
-        self.outfd.write(data)
-
-    def seek(self, offset):
-        self.queue.put(offset, block=True)
-
-    def close(self):
-        self.outfd.close()
+qfile_map = {}
 
 
 def pyaxel_open(pyaxel):
@@ -38,7 +24,7 @@ def pyaxel_open(pyaxel):
         if not pyaxellib.pyaxel_open(pyaxel):
             return 0
 
-    pyaxel.outfd = fakefile_c(pyaxel.outfd)
+    qfile_map[pyaxel.outfd] = Queue.Queue(maxsize=1)
 
     for conn in pyaxel.conn:
         conn.first_byte = conn.current_byte
@@ -63,7 +49,7 @@ def pyaxel_start(pyaxel):
 
     pyaxel.start_time = time.time()
     pyaxel.start_byte = pyaxel.bytes_done
-    pyaxel.active_threads = len(pyaxel.conn)
+    pyaxel.active_threads = pyaxel.conf.num_connections
 
 def pyaxel_run(pyaxel):
     for conn in pyaxel.conn:
@@ -114,6 +100,17 @@ def pyaxel_do(pyaxel):
         pyaxellib.pyaxel_message(pyaxel, 'Download complete.')
         pyaxel.ready = 1
 
+def pyaxel_seek(pyaxel, offset):
+    qfile_map[pyaxel.outfd].put(offset, block=True)
+
+def pyaxel_write(pyaxel, data):
+    os.lseek(pyaxel.outfd, qfile_map[pyaxel.outfd].get(), os.SEEK_SET)
+    os.write(pyaxel.outfd, data)
+
+def pyaxel_close(pyaxel):
+    del qfile_map[pyaxel.outfd]
+    pyaxellib.pyaxel_close(pyaxel)
+
 def pyaxel_save(pyaxel):
     if not pyaxel.conn[0].supported:
         return
@@ -144,8 +141,8 @@ def download_thread(pyaxel, conn):
         if size != fetch_size:
             return (-1, conn)
         try:
-            pyaxel.outfd.seek(conn.current_byte)
-            pyaxel.outfd.write(data)
+            pyaxel_seek(pyaxel, conn.current_byte)
+            pyaxel_write(pyaxel, data)
         except IOError:
             return (-2, conn)
         conn.current_byte += size
@@ -205,8 +202,8 @@ def main(argv=None):
                 return 1
 
             for prop in options.__dict__:
-                    if not callable(options.__dict__[prop]):
-                        setattr(conf, prop, getattr(options, prop))
+                if not callable(options.__dict__[prop]):
+                    setattr(conf, prop, getattr(options, prop))
 
             conf.verbose = bool(conf.verbose)
             conf.http_debug = bool(conf.http_debug)
@@ -245,7 +242,7 @@ def main(argv=None):
                 sys.stdout.flush()
                 time.sleep(1)
 
-            pyaxellib.pyaxel_close(axel)
+            pyaxel_close(axel)
         except KeyboardInterrupt:
             print
             return 1

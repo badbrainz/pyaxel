@@ -73,7 +73,7 @@ def conf_init(conf):
     conf.no_proxy = 0
     conf.strip_cgi_parameters = 1
     conf.save_state_interval = 10
-    conf.default_file_name = 'default'
+    conf.default_filename = 'default'
     conf.verbose = 1
     conf.http_debug = 0
     conf.alternate_output = 1
@@ -133,7 +133,7 @@ def conf_load(conf, path):
     conf.strip_cgi_parameters = int(parser.getopt('strip_cgi_parameters', conf.strip_cgi_parameters))
 #        conf.http_proxy = 0
 #        conf.no_proxy = 0
-#        conf.default_file_name = 'default'
+#        conf.default_filename = 'default'
 #        conf.alternate_output = 1
 #        conf.search_timeout = 10
 #        conf.search_threads = 3
@@ -197,12 +197,9 @@ def pyaxel_new(conf, count, url):
         pyaxel.ready = -1
         return pyaxel
 
-#    pyaxel.file_name = http_decode(pyaxel.conn[0].disposition or pyaxel.conn[0].file_name)
     pyaxel.file_name = pyaxel.conn[0].disposition or pyaxel.conn[0].file_name
     pyaxel.file_name = pyaxel.file_name.replace('/', '_')
-    pyaxel.file_name = http_encode(pyaxel.file_name)
-    # fuck index pages
-    #pyaxel.file_name = http_decode(pyaxel.conn[0].file_name) or conf.default_file_name
+    pyaxel.file_name = http_encode(pyaxel.file_name) or conf.default_filename
 
     s = conn_url(pyaxel.conn[0])
     pyaxel.url[0] = s
@@ -227,8 +224,12 @@ def pyaxel_open(pyaxel):
     else:
         try:
             with open('%s.st' % pyaxel.file_name, 'rb') as fd:
-                st = pickle.load(fd)
-                pyaxel.conf.num_connections = st.get('num_connections', 1)
+                try:
+                    st = pickle.load(fd)
+                except pickle.UnpicklingError:
+                    pass
+
+                pyaxel.conf.num_connections = st['num_connections']
 
                 if pyaxel.conf.num_connections > len(pyaxel.conn):
                     pyaxel.conn.extend([conn_t() for i in xrange(pyaxel.conf.num_connections - len(pyaxel.conn))])
@@ -237,20 +238,21 @@ def pyaxel_open(pyaxel):
 
                 pyaxel_divide(pyaxel)
 
-                pyaxel.bytes_done = st.get('bytes_done', 0)
-                for conn, byte in zip(pyaxel.conn, st.get('current_byte', 0)):
+                pyaxel.bytes_done = st['bytes_done']
+                for conn, byte in zip(pyaxel.conn, st['current_byte']):# check this
                     conn.current_byte = byte
 
                 pyaxel_message(pyaxel, 'State file found: %d bytes downloaded, %d remaining' %
                               (pyaxel.bytes_done, pyaxel.size - pyaxel.bytes_done))
 
                 try:
-                    pyaxel.outfd = open(pyaxel.file_name, 'wb')
-                except IOError:
+                    flags = os.O_CREAT | os.O_WRONLY
+                    if hasattr(os, 'O_BINARY'):
+                        flags |= os.O_BINARY
+                    pyaxel.outfd = os.open(pyaxel.file_name, flags)
+                except os.error:
                     pyaxel_message(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
                     return 0
-        except pickle.UnpicklingError:
-            pass
         except (IOError, EOFError):
             pass
 
@@ -258,9 +260,12 @@ def pyaxel_open(pyaxel):
         pyaxel_divide(pyaxel)
 
         try:
-            pyaxel.outfd = open(pyaxel.file_name, 'wb')
-            pyaxel.outfd.truncate(pyaxel.size)
-        except IOError:
+            flags = os.O_CREAT | os.O_WRONLY
+            if hasattr(os, 'O_BINARY'):
+                flags |= os.O_BINARY
+            pyaxel.outfd = os.open(pyaxel.file_name, flags)
+            os.ftruncate(pyaxel.outfd, pyaxel.size)
+        except os.error:
             pyaxel_message(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
             return 0
 
@@ -330,8 +335,8 @@ def pyaxel_do(pyaxel):
                     conn_disconnect(conn)
                     size = remaining
                 try:
-                    pyaxel.outfd.seek(conn.current_byte)
-                    pyaxel.outfd.write(data)
+                    os.lseek(pyaxel.outfd, conn.current_byte, os.SEEK_SET)
+                    os.write(pyaxel.outfd, data)
                 except IOError:
                     pyaxel_message(pyaxel, 'Write error!')
                     pyaxel.ready = -1
@@ -392,7 +397,7 @@ def pyaxel_close(pyaxel):
     #del pyaxel.message[:]
 
     if pyaxel.outfd != -1:
-        pyaxel.outfd.close()
+        os.close(pyaxel.outfd)
         pyaxel.outfd = -1
     for conn in pyaxel.conn:
         conn_disconnect(conn)
@@ -441,6 +446,7 @@ class conn_t:
     port = None
     proto = -1
     pwd = ''
+    query = ''
     retries = 0
     scheme = ''
     setup_thread = None
@@ -486,7 +492,7 @@ def conn_set(conn, url):
         if not conn.file_name:
             return 0
         if parts.query:
-            conn.file_name += '?%s' % parts.query
+            conn.query = '?' + parts.query
 
     conn.usr = parts.username
     conn.pwd = parts.password
@@ -581,7 +587,7 @@ def conn_exec(conn):
     return conn.http.status / 100 == 2
 
 def conn_url(conn):
-    return '%s://%s%s%s' % (conn.scheme, conn.host, conn.directory, conn.file_name)
+    return '%s://%s%s%s%s' % (conn.scheme, conn.host, conn.directory, conn.file_name, conn.query)
 
 def conn_disconnect(conn):
     http_disconnect(conn.http)
@@ -719,7 +725,6 @@ def main(argv=None):
             conf.verbose = bool(conf.verbose)
             conf.http_debug = bool(conf.http_debug)
             conf.num_connections = options.num_connections
-
             axel = pyaxel_new(conf, 0, url)
             if axel.ready == -1:
                 print_messages(axel)
