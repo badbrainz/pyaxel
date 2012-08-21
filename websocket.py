@@ -159,9 +159,6 @@ class AsyncChat(asynchat.async_chat):
         msg = struct.pack('>H%ds' % len(reason), status, reason)
         self.handle_response(msg, 0x08)
         self.handle_close()
-#        self.handler.chat_closed()
-        #self.close()
-        #self._cleanup()
 
     def _cleanup(self):
         del self.app_data[:]

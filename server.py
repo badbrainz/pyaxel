@@ -179,11 +179,8 @@ class channel_c:
             self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'data':str(e)}))
             self.close()
 
-    def chat_closed(self):
-        pass
-
     def chat_error(self):
-        pass
+        self.close()
 
     def update(self):
         if not self.axel or self.axel.ready == -1:
@@ -244,7 +241,6 @@ class server_c(asyncore.dispatcher):
             asyncore.loop(use_poll=True, timeout=1, count=1)
             for channel in self.channels:
                 channel.update()
-            sys.stdout.flush()
 
     def stop_service(self):
         self.log('stopping service')
