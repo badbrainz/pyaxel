@@ -15,7 +15,6 @@ try:
 except:
     import pickle
 
-setup_threadpool = threadpool.ThreadPool(4)
 qfile_map = {}
 
 
@@ -27,7 +26,7 @@ def pyaxel_open(pyaxel):
     qfile_map[pyaxel.outfd] = Queue.Queue(maxsize=1)
 
     for conn in pyaxel.conn:
-        conn.first_byte = conn.current_byte
+        conn.start_byte = conn.current_byte
 
     return 1
 
@@ -40,30 +39,29 @@ def pyaxel_start(pyaxel):
 
     pyaxellib.pyaxel_message(pyaxel, 'Starting download.')
 
+    pyaxel.threads = threadpool.ThreadPool(pyaxel.conf.num_connections)
     for conn in pyaxel.conn:
         if conn.current_byte <= conn.last_byte:
             conn.state = 1
             conn.reconnect_count = 0
-            setup_threadpool.addJob(threadpool.JobRequest(setup_thread, [conn]))
+            pyaxel.threads.addJob(threadpool.JobRequest(setup_thread, [conn]))
             conn.last_transfer = time.time()
 
     pyaxel.start_time = time.time()
     pyaxel.start_byte = pyaxel.bytes_done
     pyaxel.active_threads = pyaxel.conf.num_connections
+    pyaxel.ready = 0
 
-def pyaxel_run(pyaxel):
+def pyaxel_stop(pyaxel):
     for conn in pyaxel.conn:
-        pyaxel_run2(pyaxel, conn)
-
-def pyaxel_run2(pyaxel, conn):
-    setup_threadpool.addJob(threadpool.JobRequest(download_thread, [pyaxel, conn]))
+        conn.enabled = 0
 
 def pyaxel_do(pyaxel):
     if time.time() > pyaxel.next_state:
         pyaxel_save(pyaxel)
         pyaxel.next_state = time.time() + pyaxel.conf.save_state_interval
 
-    for job in setup_threadpool.iterProcessedJobs(0):
+    for job in pyaxel.threads.iterProcessedJobs(0):
         state, conn = job.result()
         if state == -2:
             pyaxellib.pyaxel_message(pyaxel, 'Write error!')
@@ -80,7 +78,7 @@ def pyaxel_do(pyaxel):
                 conn.reconnect_count += 1
                 pyaxellib.conn_set(conn, pyaxel.url[0])
                 conn.state = 1
-                setup_threadpool.addJob(threadpool.JobRequest(setup_thread, [conn]))
+                pyaxel.threads.addJob(threadpool.JobRequest(setup_thread, [conn]))
                 conn.last_transfer = time.time()
             else:
                 pyaxellib.pyaxel_message(pyaxel, 'Error on connection %d.' % pyaxel.conn.index(conn))
@@ -93,9 +91,9 @@ def pyaxel_do(pyaxel):
             pyaxel.active_threads -= 1
         elif state == 1:
             pyaxellib.pyaxel_message(pyaxel, 'Connection %d opened.' % pyaxel.conn.index(conn))
-            pyaxel_run2(pyaxel, conn)
+            pyaxel.threads.addJob(threadpool.JobRequest(download_thread, [pyaxel, conn]))
 
-    pyaxel.bytes_done = pyaxel.start_byte + sum(map(lambda x: x.current_byte - x.first_byte, pyaxel.conn))
+    pyaxel.bytes_done = pyaxel.start_byte + sum([conn.current_byte - conn.start_byte for conn in pyaxel.conn])
     if pyaxel.bytes_done == pyaxel.size:
         pyaxellib.pyaxel_message(pyaxel, 'Download complete.')
         pyaxel.ready = 1
@@ -108,8 +106,15 @@ def pyaxel_write(pyaxel, data):
     os.write(pyaxel.outfd, data)
 
 def pyaxel_close(pyaxel):
-    del qfile_map[pyaxel.outfd]
+    if pyaxel.outfd in qfile_map:
+        del qfile_map[pyaxel.outfd] # WARN
     pyaxellib.pyaxel_close(pyaxel)
+
+def pyaxel_unlink(pyaxel):
+    if os.path.exists('%s.st' % self.axel.file_name):
+        os.remove('%s.st' % self.axel.file_name)
+    if os.path.exists(self.axel.file_name):
+        os.remove(self.axel.file_name)
 
 def pyaxel_save(pyaxel):
     if not pyaxel.conn[0].supported:
@@ -120,7 +125,7 @@ def pyaxel_save(pyaxel):
             bytes = [conn.current_byte for conn in pyaxel.conn]
             state = {
                 'num_connections': pyaxel.conf.num_connections,
-                'bytes_done': pyaxel.start_byte + sum([x - c.first_byte for x, c in zip(bytes, pyaxel.conn)]),
+                'bytes_done': pyaxel.start_byte + sum([offset - conn.start_byte for offset, conn in zip(bytes, pyaxel.conn)]),
                 'current_byte': bytes
             }
             pickle.dump(state, fd)
@@ -171,21 +176,21 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv
 
-    parser = OptionParser(usage="Usage: %prog [options] url")
-    parser.add_option("-q", "--quiet", dest="verbose",
-                      default=False, action="store_true",
-                      help="leave stdout alone")
-    parser.add_option("-p", "--print", dest="http_debug",
-                      default=False, action="store_true",
-                      help="print HTTP info")
-    parser.add_option("-n", "--num-connections", dest="num_connections",
-                      type="int", default=1,
-                      help="specify maximum number of connections",
-                      metavar="x")
-    parser.add_option("-s", "--max-speed", dest="max_speed",
-                      type="int", default=0,
-                      help="specify maximum speed (bytes per second)",
-                      metavar="x")
+    parser = OptionParser(usage='Usage: %prog [options] url')
+    parser.add_option('-q', '--quiet', dest='verbose',
+                      default=False, action='store_true',
+                      help='leave stdout alone')
+    parser.add_option('-p', '--print', dest='http_debug',
+                      default=False, action='store_true',
+                      help='print HTTP info')
+    parser.add_option('-n', '--num-connections', dest='num_connections',
+                      type='int', default=1,
+                      help='specify maximum number of connections',
+                      metavar='x')
+    parser.add_option('-s', '--max-speed', dest='max_speed',
+                      type='int', default=0,
+                      help='specify maximum speed (bytes per second)',
+                      metavar='x')
 
     (options, args) = parser.parse_args(argv[1:])
 
@@ -211,10 +216,10 @@ def main(argv=None):
 
             axel = pyaxellib.pyaxel_new(conf, 0, url)
             if axel.ready == -1:
-                pyaxellib.print_messages(axel)
+                pyaxellib.pyaxel_print(axel)
                 return 1
 
-            pyaxellib.print_messages(axel)
+            pyaxellib.pyaxel_print(axel)
 
             # TODO check permissions, destination opt, etc.
             if not bool(os.stat(os.getcwd()).st_mode & stat.S_IWUSR):
@@ -228,16 +233,16 @@ def main(argv=None):
 #                    return 0
 
             if not pyaxel_open(axel):
-                pyaxellib.print_messages(axel)
+                pyaxellib.pyaxel_print(axel)
                 return 1
 
             pyaxel_start(axel)
-            pyaxellib.print_messages(axel)
+            pyaxellib.pyaxel_print(axel)
 
             while axel.active_threads:
                 pyaxel_do(axel)
                 if axel.message:
-                    pyaxellib.print_messages(axel)
+                    pyaxellib.pyaxel_print(axel)
                 sys.stdout.write('Downloaded [%d%%]\r' % (axel.bytes_done * 100 / axel.size))
                 sys.stdout.flush()
                 time.sleep(1)
@@ -253,5 +258,5 @@ def main(argv=None):
 
         return 0
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())

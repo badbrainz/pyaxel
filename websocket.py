@@ -38,23 +38,23 @@ class AsyncChat(asynchat.async_chat):
         crlf = '\x0D\x0A'
 
         # TODO validate GET
-        fields = dict([l.split(": ", 1) for l in data.split(crlf)[1:]])
-        required = ("Host", "Upgrade", "Connection", "Sec-WebSocket-Key",
-                    "Sec-WebSocket-Version")
+        fields = dict([l.split(': ', 1) for l in data.split(crlf)[1:]])
+        required = ('Host', 'Upgrade', 'Connection', 'Sec-WebSocket-Key',
+                    'Sec-WebSocket-Version')
         if not all(map(lambda f: f in fields, required)):
-            self.log_info("malformed request:\n%s" % data, "error")
+            self.log_info('malformed request:\n%s' % data, 'error')
             self.handle_error()
             return
 
         sha1 = hashlib.sha1()
-        sha1.update(fields["Sec-WebSocket-Key"])
-        sha1.update("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+        sha1.update(fields['Sec-WebSocket-Key'])
+        sha1.update('258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
         challenge = base64.b64encode(sha1.digest())
 
-        self.push("HTTP/1.1 101 Switching Protocols" + crlf)
-        self.push("Upgrade: websocket" + crlf)
-        self.push("Connection: Upgrade" + crlf)
-        self.push("Sec-WebSocket-Accept: %s" % challenge + crlf * 2)
+        self.push('HTTP/1.1 101 Switching Protocols' + crlf)
+        self.push('Upgrade: websocket' + crlf)
+        self.push('Connection: Upgrade' + crlf)
+        self.push('Sec-WebSocket-Accept: %s' % challenge + crlf * 2)
 
         self.handshaken = True
         self.set_terminator(2)
@@ -65,7 +65,7 @@ class AsyncChat(asynchat.async_chat):
 
         # no extensions
         if hi & 0x70:
-            self.log_info("no extensions support", "error")
+            self.log_info('no extensions support', 'error')
             self.handle_error()
             return
 
@@ -76,7 +76,7 @@ class AsyncChat(asynchat.async_chat):
         control = opcode & 0x0B
 
         if not control and opcode == 0x02:
-            self.log_info("unsupported data format", "error")
+            self.log_info('unsupported data format', 'error')
             self.handle_error()
             return
 
@@ -84,7 +84,7 @@ class AsyncChat(asynchat.async_chat):
             if control >= 0x08:
                 # TODO handle ping/pong
                 if length > 0x7D:
-                    self.log_info("bad frame", "error")
+                    self.log_info('bad frame', 'error')
                     self.handle_error()
                     return
         else:
@@ -92,7 +92,7 @@ class AsyncChat(asynchat.async_chat):
                 if opcode == 0x01:
                     if self.frame_header:
                         # no interleave
-                        self.log_info("unsupported message format", "error")
+                        self.log_info('unsupported message format', 'error')
                         self.handle_error()
                         return
 
@@ -135,7 +135,7 @@ class AsyncChat(asynchat.async_chat):
         self.app_data.extend(bytes)
         if self.frame_header[0]:
             del self.frame_header
-            msg = "".join(self.app_data)
+            msg = ''.join(self.app_data)
             del self.app_data[:]
             self.handler.chat_message(msg)
         self.set_terminator(2)
@@ -155,8 +155,8 @@ class AsyncChat(asynchat.async_chat):
         self.handle_close()
         self.handler.chat_error()
 
-    def disconnect(self, status=CLS_NORM, reason=""):
-        msg = struct.pack(">H%ds" % len(reason), status, reason)
+    def disconnect(self, status=CLS_NORM, reason=''):
+        msg = struct.pack('>H%ds' % len(reason), status, reason)
         self.handle_response(msg, 0x08)
         self.handle_close()
 #        self.handler.chat_closed()
@@ -173,6 +173,6 @@ class AsyncChat(asynchat.async_chat):
         self.handshaken = False
 
     def _get_input(self):
-        data = "".join(self.in_buffer)
+        data = ''.join(self.in_buffer)
         del self.in_buffer[:]
         return data

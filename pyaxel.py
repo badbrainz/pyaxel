@@ -1,18 +1,5 @@
 #!/usr/bin/env python
 
-''' TODO
-    * implement rate limiting
-    * handle network error:
-        - unable to break from infinit loop
-
-    CHANGES
-    * renamed http_connect to http_init
-    * renamed conn.dir to conn.directory
-    * renamed conn.file to conn.file_name
-    * conn_setup sets Range header
-    * deprecated http_size()
-'''
-
 import ConfigParser
 import contextlib
 import httplib
@@ -35,10 +22,10 @@ except:
 from collections import deque
 #from ConfigParser import SafeConfigParser
 
-PYAXEL_VERSION = "1.0.0"
-PYAXEL_SVN = "r"
+PYAXEL_VERSION = '1.0.0'
+PYAXEL_SVN = 'r'
 PYAXEL_PATH = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
-PYAXEL_CONFIG = "pyaxel.cfg"
+PYAXEL_CONFIG = 'pyaxel.cfg'
 PYAXEL_DEST = PYAXEL_PATH
 
 PROTO_FTP = 1
@@ -49,11 +36,11 @@ SCHEME_DEFAULT = 'http'
 INT_MAX = sys.maxsize
 
 STD_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) "\
-        "Gecko/20100115 Firefox/3.6",
-    "Accept-Charset": "ISO-8859-1,utf-8;q=0.7,*;q=0.7",
-    "Accept-Language": "ISO-8859-1,utf-8;q=0.7,*;q=0.3",
-    "Accept-Encoding": "gzip,deflate,sdch"
+    'User-Agent': 'Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) '\
+        'Gecko/20100115 Firefox/3.6',
+    'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+    'Accept-Language': 'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
+    'Accept-Encoding': 'gzip,deflate,sdch'
 }
 
 dbg_lvl = 0
@@ -97,15 +84,13 @@ class CfgParser(ConfigParser.RawConfigParser):
         ret = []
         try:
             with open(filename, 'r') as fd:
-                text = StringIO.StringIO("[%s]\n" % CfgParser.fakesec + fd.read())
+                text = StringIO.StringIO('[%s]\n' % CfgParser.fakesec + fd.read())
                 self.readfp(text, filename)
         except (IOError, EOFError):
             pass
         else:
             ret.append(filename)
-
         return ret
-
 
     def getopt(self, opt, default=None):
         try: return self.get(CfgParser.fakesec, opt)
@@ -151,6 +136,7 @@ class pyaxel_t:
     conn = []
     delay_time = 0
     file_name = ''
+    last_error = ''
     message = []
     next_state = 0
     outfd = -1
@@ -168,7 +154,7 @@ def pyaxel_new(conf, count, url):
 
     if conf.max_speed > 0:
         if conf.max_speed / conf.buffer_size < 1:
-            pyaxel_message(pyaxel, "Buffer resized for this speed.")
+            pyaxel_message(pyaxel, 'Buffer resized for this speed.')
             conf.buffer_size = conf.max_speed
         pyaxel.delay_time = 1000000 / conf.max_speed * conf.buffer_size * conf.num_connections
     #pyaxel.buffer = ''
@@ -183,23 +169,23 @@ def pyaxel_new(conf, count, url):
     pyaxel.conn[0].conf = conf
 
     if not conn_set(pyaxel.conn[0], pyaxel.url[0]):
-        pyaxel_message(pyaxel, "Could not parse URL.")
+        pyaxel_error(pyaxel, 'Could not parse URL.')
         pyaxel.ready = -1
         return pyaxel
 
     if not conn_init(pyaxel.conn[0]):
-        pyaxel_message(pyaxel, pyaxel.conn[0].message)
+        pyaxel_error(pyaxel, pyaxel.conn[0].message)
         pyaxel.ready = -1
         return pyaxel
 
     if not conn_info(pyaxel.conn[0]):
-        pyaxel_message(pyaxel, pyaxel.conn[0].message)
+        pyaxel_error(pyaxel, pyaxel.conn[0].message)
         pyaxel.ready = -1
         return pyaxel
 
     pyaxel.file_name = pyaxel.conn[0].disposition or pyaxel.conn[0].file_name
     pyaxel.file_name = pyaxel.file_name.replace('/', '_')
-    pyaxel.file_name = http_encode(pyaxel.file_name) or conf.default_filename
+    pyaxel.file_name = http_decode(pyaxel.file_name) or conf.default_filename
 
     s = conn_url(pyaxel.conn[0])
     pyaxel.url[0] = s
@@ -251,7 +237,7 @@ def pyaxel_open(pyaxel):
                         flags |= os.O_BINARY
                     pyaxel.outfd = os.open(pyaxel.file_name, flags)
                 except os.error:
-                    pyaxel_message(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
+                    pyaxel_error(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
                     return 0
         except (IOError, EOFError):
             pass
@@ -266,7 +252,7 @@ def pyaxel_open(pyaxel):
             pyaxel.outfd = os.open(pyaxel.file_name, flags)
             os.ftruncate(pyaxel.outfd, pyaxel.size)
         except os.error:
-            pyaxel_message(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
+            pyaxel_error(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
             return 0
 
     return 1
@@ -376,11 +362,13 @@ def pyaxel_do(pyaxel):
         pyaxel.ready = 1
 
 def pyaxel_divide(pyaxel):
+    pyaxel.conn[0].first_byte = 0
     pyaxel.conn[0].current_byte = 0
     pyaxel.conn[0].last_byte = pyaxel.size / pyaxel.conf.num_connections - 1
     for i in xrange(1, pyaxel.conf.num_connections):
         pyaxel.conn[i].current_byte = pyaxel.conn[i-1].last_byte + 1
-        pyaxel.conn[i].last_byte = pyaxel.conn[i].current_byte + pyaxel.size / pyaxel.conf.num_connections
+        pyaxel.conn[i].first_byte = pyaxel.conn[i].current_byte
+        pyaxel.conn[i].last_byte = pyaxel.conn[i].current_byte + pyaxel.size / pyaxel.conf.num_connections - 1
     pyaxel.conn[pyaxel.conf.num_connections-1].last_byte = pyaxel.size - 1
 
 def pyaxel_close(pyaxel):
@@ -409,7 +397,11 @@ def pyaxel_message(pyaxel, msg):
         pyaxel.message = []
     pyaxel.message.append(msg)
 
-def print_messages(pyaxel):
+def pyaxel_error(pyaxel, msg):
+    pyaxel.last_error = msg
+    pyaxel_message(pyaxel, msg)
+
+def pyaxel_print(pyaxel):
     print '\n'.join(pyaxel.message)
     del pyaxel.message[:]
 
@@ -451,6 +443,7 @@ class conn_t:
     scheme = ''
     setup_thread = None
     size = 0
+    first_byte = None
     state = -1
     supported = 0
     usr = ''
@@ -525,7 +518,7 @@ def conn_info(conn):
     conn.current_byte = 0
     if not conn_setup(conn):
         return 0
-    if not conn_exec(conn):
+    if not conn_exec(conn): # WARN could potentially stall for as long as 20s
         conn.message = conn.http.headers
         return 0
     conn_disconnect(conn)
@@ -537,24 +530,20 @@ def conn_info(conn):
     conn.disposition = http_header(conn.http, 'content-disposition')
     if conn.disposition:
         conn.disposition = conn.disposition.split('filename=')
-        if len(conn.disposition) == 2 and conn.disposition[1].startswith(('"',"'")):
+        if len(conn.disposition) == 2 and conn.disposition[1].startswith(('"','\'')):
             conn.disposition = conn.disposition[1][1:-1]
         else:
             conn.disposition = None
 
     # TODO check transfer-encoding
     conn.size = int(http_header(conn.http, 'content-length') or 0)
-#    if conn.http.status == 206 and conn.size >= 0:
-#        conn.supported = 1
-#        conn.size += 1
-#    elif conn.http.status in (200, 206):
-#        conn.supported = 0
-#        conn.size = INT_MAX
     if conn.http.status in (200, 206) and conn.size > 0:
         if conn.http.status == 206:
             conn.supported = 1
+#            conn.size += 1
         else:
             conn.supported = 0
+#            conn.size = INT_MAX
     else:
         conn.message = 'Unknown HTTP error.'
         return 0
@@ -663,11 +652,11 @@ def http_disconnect(http):
         http.fd = None
 
 def http_decode(s):
-    # safe="%/:=&?~#+!$,;'@()*[]|"
-    return urllib.quote(s)
+    # safe='%/:=&?~#+!$,;'@()*[]|'
+    return urllib.unquote_plus(s)
 
 def http_encode(s):
-    return urllib.unquote(s)
+    return urllib.quote_plus(s)
 
 def setup_thread(conn):
     if conn_setup(conn):
@@ -688,21 +677,21 @@ def main(argv=None):
         argv = sys.argv
 
     from optparse import OptionParser
-    parser = OptionParser(usage="Usage: %prog [options] url")
-    parser.add_option("-q", "--quiet", dest="verbose",
-                      default=False, action="store_true",
-                      help="leave stdout alone")
-    parser.add_option("-p", "--print", dest="http_debug",
-                      default=False, action="store_true",
-                      help="print HTTP info")
-    parser.add_option("-n", "--num-connections", dest="num_connections",
-                      type="int", default=1,
-                      help="specify maximum number of connections",
-                      metavar="x")
-    parser.add_option("-s", "--max-speed", dest="max_speed",
-                      type="int", default=0,
-                      help="specify maximum speed (bytes per second)",
-                      metavar="x")
+    parser = OptionParser(usage='Usage: %prog [options] url')
+    parser.add_option('-q', '--quiet', dest='verbose',
+                      default=False, action='store_true',
+                      help='leave stdout alone')
+    parser.add_option('-p', '--print', dest='http_debug',
+                      default=False, action='store_true',
+                      help='print HTTP info')
+    parser.add_option('-n', '--num-connections', dest='num_connections',
+                      type='int', default=1,
+                      help='specify maximum number of connections',
+                      metavar='x')
+    parser.add_option('-s', '--max-speed', dest='max_speed',
+                      type='int', default=0,
+                      help='specify maximum speed (bytes per second)',
+                      metavar='x')
 
     (options, args) = parser.parse_args()
 
@@ -727,10 +716,10 @@ def main(argv=None):
             conf.num_connections = options.num_connections
             axel = pyaxel_new(conf, 0, url)
             if axel.ready == -1:
-                print_messages(axel)
+                pyaxel_print(axel)
                 return 1
 
-            print_messages(axel)
+            pyaxel_print(axel)
 
             # TODO check permissions, destination opt, etc.
             if not bool(os.stat(os.getcwd()).st_mode & stat.S_IWUSR):
@@ -744,16 +733,16 @@ def main(argv=None):
 #                return 0
 
             if not pyaxel_open(axel):
-                print_messages(axel)
+                pyaxel_print(axel)
                 return 1
 
             pyaxel_start(axel)
-            print_messages(axel)
+            pyaxel_print(axel)
 
             while not axel.ready:
                 pyaxel_do(axel)
                 if axel.message:
-                    print_messages(axel)
+                    pyaxel_print(axel)
                 sys.stdout.write('Downloaded [%d%%]\r' % (axel.bytes_done * 100 / axel.size))
                 sys.stdout.flush()
 
@@ -768,6 +757,6 @@ def main(argv=None):
 
         return 0
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     print 'pyaxel %s-%s' % (PYAXEL_VERSION, PYAXEL_SVN)
     sys.exit(main())
