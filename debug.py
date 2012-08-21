@@ -3,6 +3,9 @@ import sys
 import traceback
 def backtrace(debug_locals=True):
     tb = sys.exc_info()[2]
+    if not tb:
+        print "No exception is being handled"
+        return
     while 1:
         if not tb.tb_next:
             break
