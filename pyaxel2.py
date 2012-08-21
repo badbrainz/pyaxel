@@ -111,10 +111,10 @@ def pyaxel_close(pyaxel):
     pyaxellib.pyaxel_close(pyaxel)
 
 def pyaxel_unlink(pyaxel):
-    if os.path.exists('%s.st' % self.axel.file_name):
-        os.remove('%s.st' % self.axel.file_name)
-    if os.path.exists(self.axel.file_name):
-        os.remove(self.axel.file_name)
+    if os.path.exists('%s.st' % pyaxel.file_name):
+        os.remove('%s.st' % pyaxel.file_name)
+    if os.path.exists(pyaxel.file_name):
+        os.remove(pyaxel.file_name)
 
 def pyaxel_save(pyaxel):
     if not pyaxel.conn[0].supported:
