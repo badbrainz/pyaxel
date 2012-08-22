@@ -132,10 +132,12 @@ def conf_load(conf, path):
 class pyaxel_t:
     #buffer = ''
     bytes_done = 0
+    bytes_per_second = 0
     conf = None
     conn = []
     delay_time = 0
     file_name = ''
+    finish_time = 0
     last_error = ''
     message = []
     next_state = 0
@@ -156,7 +158,7 @@ def pyaxel_new(conf, count, url):
         if conf.max_speed / conf.buffer_size < 1:
             pyaxel_message(pyaxel, 'Buffer resized for this speed.')
             conf.buffer_size = conf.max_speed
-        pyaxel.delay_time = 1000000 / conf.max_speed * conf.buffer_size * conf.num_connections
+        pyaxel.delay_time = 10000 / conf.max_speed * conf.buffer_size * conf.num_connections
     #pyaxel.buffer = ''
 
     pyaxel.url = deque()
@@ -276,6 +278,7 @@ def pyaxel_start(pyaxel):
             conn.last_transfer = time.time()
 
     pyaxel.start_time = time.time()
+    pyaxel.start_byte = pyaxel.bytes_done
     pyaxel.ready = 0
 
 def pyaxel_do(pyaxel):
@@ -337,7 +340,6 @@ def pyaxel_do(pyaxel):
     if pyaxel.ready:
         return
 
-    # TODO limit reconnect attempt
     for conn in pyaxel.conn:
         if conn.enabled == -1 and conn.current_byte < conn.last_byte:
             if conn.state == 0:
@@ -355,7 +357,17 @@ def pyaxel_do(pyaxel):
                     conn_disconnect(conn)
                     conn.state = 0
 
-    # TODO calculate current average speed and finish_time
+    pyaxel.bytes_per_second = (pyaxel.bytes_done - pyaxel.start_byte) / (time.time() - pyaxel.start_time)
+    pyaxel.finish_time = pyaxel.start_time + (pyaxel.size - pyaxel.start_byte) / pyaxel.bytes_per_second
+
+    if pyaxel.conf.max_speed > 0:
+        if pyaxel.bytes_per_second / pyaxel.conf.max_speed > 1.05:
+            pyaxel.delay_time += 0.01
+        elif pyaxel.bytes_per_second / pyaxel.conf.max_speed < 0.95 and pyaxel.delay_time >= 0.01:
+            pyaxel.delay_time -= 0.01
+        elif pyaxel.bytes_per_second / pyaxel.conf.max_speed < 0.95:
+            pyaxel.delay_time = 0
+        time.sleep(pyaxel.delay_time)
 
     if pyaxel.bytes_done == pyaxel.size:
         pyaxel_message(pyaxel, 'Download complete.')
@@ -740,22 +752,73 @@ def main(argv=None):
             pyaxel_print(axel)
 
             while not axel.ready:
+                prev = axel.bytes_done
                 pyaxel_do(axel)
-                if axel.message:
-                    pyaxel_print(axel)
-                sys.stdout.write('Downloaded [%d%%]\r' % (axel.bytes_done * 100 / axel.size))
-                sys.stdout.flush()
 
-            # TODO print elapsed time
+                if conf.alternate_output:
+                    if not axel.message and prev != axel.bytes_done:
+                        print_alternate_output(axel)
+                else:
+                    pass
+
+                if axel.message:
+                    if conf.alternate_output:
+                        sys.stdout.write('\r\x1b[K')
+                    else:
+                        sys.stdout.write('\n')
+                    pyaxel_print(axel)
+                    if not axel.ready:
+                        if conf.alternate_output != 1:
+                            pass
+                        else:
+                            print_alternate_output(axel)
+                elif axel.ready:
+                    sys.stdout.write('\n')
+
             pyaxel_close(axel)
+            sys.stdout.flush()
         except KeyboardInterrupt:
             print
             return 1
         except:
+            print
             print 'Unknown error!'
             return 1
 
         return 0
+
+def print_alternate_output(pyaxel):
+    if pyaxel.bytes_done < pyaxel.size:
+        sys.stdout.write('\r\x1b[K')
+        sys.stdout.write('[%d%%]' % (pyaxel.bytes_done * 100 / pyaxel.size))
+        seconds = int(pyaxel.finish_time - time.time())
+        minutes = int(seconds / 60)
+        seconds -= minutes * 60
+        hours = int(minutes / 60)
+        minutes -= hours * 60
+        days = int(hours / 24)
+        hours -= days * 24
+        if days:
+            sys.stdout.write(' [%dd %dh]' % (days, hours))
+        elif hours:
+            sys.stdout.write(' [%dh %dm]' % (hours, minutes))
+        else:
+            sys.stdout.write(' [%dm %ds]' % (minutes, seconds))
+    sys.stdout.flush()
+
+def get_time_left(time_in_secs):
+    ret_str = ""
+    mult_list = [60, 60 * 60, 60 * 60 * 24]
+    unit_list = ["second(s)", "minute(s)", "hour(s)", "day(s)"]
+    for i in range(len(mult_list)):
+        if time_in_secs < mult_list[i]:
+            pval = int(time_in_secs / (mult_list[i - 1] if i > 0 else 1))
+            ret_str = "%d %s" % (pval, unit_list[i])
+            break
+    if len(ret_str) == 0:
+        ret_str = "%d %s." % (int(time_in_secs / mult_list[2]), \
+                                  unit_list[3])
+    return ret_str
 
 if __name__ == '__main__':
     print 'pyaxel %s-%s' % (PYAXEL_VERSION, PYAXEL_SVN)
