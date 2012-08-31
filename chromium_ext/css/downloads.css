@@ -70,7 +70,6 @@ body{
 	-webkit-box-flex:1;
 }
 .rate{
-	margin-right:.5em
 }
 .name{
 	-webkit-box-flex: 1
@@ -85,6 +84,9 @@ body{
 }
 .labels > .status{
 	color:#8a8a8a
+}
+.title div {
+	padding-right: 4px;
 }
 #toolbar{
 	display:-webkit-box;

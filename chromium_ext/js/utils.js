@@ -1,9 +1,4 @@
-var ConnectionEvent = {
-    CONNECTED: 0,
-    DISCONNECTED: 1,
-    ERROR: 2
-};
-
+/* transfer codes (internal) */
 var DownloadStatus = {
     QUEUED: 0,
     INITIALIZING: 1,
@@ -12,7 +7,9 @@ var DownloadStatus = {
     CANCELLED: 4,
     PAUSED: 5,
     UNDEFINED: 6,
-    CONNECTING: 7
+    CONNECTING: 7,
+    ERROR: 8,
+    CLOSING: 9
 };
 
 /* serv commands */
@@ -26,40 +23,39 @@ var ServerCommand = {
 
 /* serv reply codes */
 var MessageEvent = {
-    ACK: 0,
-    OK: 1,
-    INVALID: 2,
-    BAD_REQUEST: 3,
-    ERROR: 4,
-    PROCESSING: 5,
-    END: 6,
-    INCOMPLETE: 7,
-    STOPPED: 8,
-    UNDEFINED: 9,
-    INITIALIZING: 10
+    INITIALIZING: 0,
+    ACK: 1,
+    OK: 2,
+    PROCESSING: 3,
+    END: 4,
+    CLOSING: 5,
+    INCOMPLETE: 6,
+    STOPPED: 7,
+    INVALID: 8,
+    BAD_REQUEST: 9,
+    ERROR: 10,
+    UNDEFINED: 11
 };
 
-var Event = function(sender) {
-    this.sender = sender;
-    this.listeners = [];
+/* socket readyState codes */
+var WebSocketEvent = {
+    CONNECTING: 0,
+    OPEN: 1,
+    CLOSING: 2,
+    CLOSED: 3
 };
 
-Event.prototype = {
-    attach: function(callback, context) {
-        for (var i = 0, il = this.listeners.length; i < il; i++) {
-            if (this.listeners[i].callback === callback) return;
-        }
-        this.listeners.push({
-            'callback': callback,
-            'context': context || callback
-        });
-    },
-    notify: function(args) {
-        for (var i = 0, il = this.listeners.length; i < il; i++) {
-            this.listeners[i].callback.call(this.listeners[i].context, this.sender, args);
-        }
-    }
+/* internal */
+var ConnectionEvent = {
+    CONNECTED: 0,
+    DISCONNECTED: 1,
+    ERROR: 2
 };
+
+function id() {
+    return id._++;
+}
+id._ = 0;
 
 function sum(list) {
     var sum = 0;
@@ -79,10 +75,17 @@ function formatString(tpl, args) {
 }
 
 function formatBytes(bytes) {
-    if (bytes === 0) return '0b';
+    if (!bytes) return '';
     var s = ['bytes', 'kb', 'MB', 'GB', 'TB', 'PB'];
     var e = Math.floor(Math.log(bytes) / Math.log(1024));
     return (bytes / Math.pow(1024, Math.floor(e))).toFixed(2) + ' ' + s[e];
+}
+
+function addQueryPart(url, map) {
+    var query = url[url.length - 1] !== '?' ? '?' : '';
+    for (var key in map)
+        query += formatString('{0}={1}&', key, encodeURIComponent(map[key]));
+    return url + query;
 }
 
 function getValues(hash) {
@@ -92,10 +95,13 @@ function getValues(hash) {
 }
 
 function copy(target, props) {
-    for (var prop in props) {
-        var p = props[prop];
-        if (p && p.constructor && p.constructor === Object) target[prop] = arguments.callee({}, p);
-        else target[prop] = p;
+    if (props) {
+        for (var prop in props) {
+            var p = props[prop];
+            if (p && p.constructor && p.constructor === Object)
+                target[prop] = arguments.callee({}, p);
+            else target[prop] = p;
+        }
     }
     return target;
 }
@@ -109,13 +115,31 @@ function paramedFunction(args) {
     }
 }
 
+function today() {
+    var date = new Date();
+    var months = [
+        "Jan","Feb","Mar","Apr","May","Jun",
+        "Jul","Aug","Sep","Oct","Nov","Dec"
+    ];
+    return months[date.getMonth()] + " " + date.getDate() + ", " + date.getFullYear();
+}
+
+function typeOf(obj) {
+    var v;
+    if (v = /(undefined|string|number|boolean)/.exec(typeof obj)) return v[1];
+    var type = Object.prototype.toString.call( /** @type {Object} */ (obj)).toLowerCase();
+    return /\b([a-z]+).$/i.exec(type)[1];
+}
+
 var Url = {
     encode: function(string) {
         return escape(this._utf8_encode(string));
     },
+
     decode: function(string) {
         return this._utf8_decode(unescape(string));
     },
+
     _utf8_encode: function(string) {
         string = string.replace(/\r\n/g, '\n');
         var utftext = '';
@@ -136,6 +160,7 @@ var Url = {
         }
         return utftext;
     },
+
     _utf8_decode: function(utftext) {
         var string = '';
         var i = 0;

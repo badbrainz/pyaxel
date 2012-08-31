@@ -1,5 +1,37 @@
 /** @constructor */
 
+function Event(sender) {
+
+	/** @private */
+    this.sender = sender;
+
+    /** @private */
+    this.listeners = [];
+}
+
+/**
+ * @param {Function} callback
+ * @param {Object} context
+ */
+Event.prototype.attach = function(callback, context) {
+    for (var i = 0, il = this.listeners.length; i < il; i++) {
+        if (this.listeners[i].callback === callback) return;
+    }
+    this.listeners.push({
+        'callback': callback,
+        'context': context || callback
+    });
+};
+
+/** @param {...*} args */
+Event.prototype.notify = function(args) {
+    for (var i = 0, il = this.listeners.length; i < il; i++) {
+        this.listeners[i].callback.call(this.listeners[i].context, this.sender, args);
+    }
+};
+
+/** @constructor */
+
 function Emitter() {
 
 	/** @private */
@@ -34,20 +66,20 @@ Emitter.prototype.notify = function(args) {
 
 /** @constructor */
 
-function Broadcaster() {
+function Broadcaster(var_args) {
 
 	/** @private */
 	this.events = Object.create(null);
+
+	this.addEvent.apply(this, Array.prototype.slice.call(arguments, 0));
 }
 
 /** @param {...string} args */
 Broadcaster.prototype.addEvent = function(args) {
-	var arg;
 	var events = this.events;
 	var i = arguments.length;
 	while (i--) {
-		arg = arguments[i];
-		events[arg] = events[arg] || new Emitter();
+		events[arguments[i]] = events[arguments[i]] || new Emitter();
 	}
 };
 
@@ -65,7 +97,7 @@ Broadcaster.prototype.removeEvent = function(args) {
 };
 
 /** @param {...*} args */
-Broadcaster.prototype.fireEvent = function(args) {
+Broadcaster.prototype.send = function(args) {
 	var name = arguments[0];
 	var events = this.events;
 	name in events && events[name].notify.apply(events[name], Array.prototype.slice.call(arguments, 1));
