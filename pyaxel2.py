@@ -37,7 +37,7 @@ def pyaxel_start(pyaxel):
         if i:
             conn.supported = 1
 
-    pyaxellib.pyaxel_message(pyaxel, 'Starting download.')
+    pyaxellib.pyaxel_message(pyaxel, 'Starting download: %s' % pyaxel.file_name)
 
     pyaxel.threads = threadpool.ThreadPool(pyaxel.conf.num_connections)
     for conn in pyaxel.conn:
@@ -48,13 +48,27 @@ def pyaxel_start(pyaxel):
             conn.last_transfer = time.time()
 
     pyaxel.start_time = time.time()
-    pyaxel.start_byte = pyaxel.bytes_done
+    pyaxel.bytes_start = pyaxel.bytes_done
     pyaxel.active_threads = pyaxel.conf.num_connections
     pyaxel.ready = 0
 
 def pyaxel_stop(pyaxel):
+    pyaxellib.pyaxel_message(pyaxel, 'Stopping download: %s' % pyaxel.file_name)
+
     for conn in pyaxel.conn:
         conn.enabled = 0
+    pyaxel.ready = 2
+
+def pyaxel_abort(pyaxel):
+    pyaxellib.pyaxel_message(pyaxel, 'Aborting download: %s' % pyaxel.file_name)
+
+    for conn in pyaxel.conn:
+        conn.enabled = 0
+    if os.path.exists('%s.st' % pyaxel.file_name):
+        os.remove('%s.st' % pyaxel.file_name)
+    if os.path.exists(pyaxel.file_name):
+        os.remove(pyaxel.file_name)
+    pyaxel.ready = 3
 
 def pyaxel_do(pyaxel):
     if time.time() > pyaxel.next_state:
@@ -93,9 +107,12 @@ def pyaxel_do(pyaxel):
             pyaxellib.pyaxel_message(pyaxel, 'Connection %d opened.' % pyaxel.conn.index(conn))
             pyaxel.threads.addJob(threadpool.JobRequest(download_thread, [pyaxel, conn]))
 
-    pyaxel.bytes_done = pyaxel.start_byte + sum([conn.current_byte - conn.start_byte for conn in pyaxel.conn])
+    pyaxel.bytes_done = pyaxel.bytes_start + sum([conn.current_byte - conn.start_byte for conn in pyaxel.conn])
+    pyaxel.bytes_per_second = (pyaxel.bytes_done - pyaxel.bytes_start) / (time.time() - pyaxel.start_time)
+#    pyaxel.finish_time = pyaxel.start_time + (pyaxel.size - pyaxel.bytes_start) / pyaxel.bytes_per_second
+
     if pyaxel.bytes_done == pyaxel.size:
-        pyaxellib.pyaxel_message(pyaxel, 'Download complete.')
+        pyaxellib.pyaxel_message(pyaxel, 'Download complete: %s' % pyaxel.file_name)
         pyaxel.ready = 1
 
 def pyaxel_seek(pyaxel, offset):
@@ -108,15 +125,29 @@ def pyaxel_write(pyaxel, data):
 def pyaxel_close(pyaxel):
     if pyaxel.outfd in qfile_map:
         del qfile_map[pyaxel.outfd] # WARN
-    pyaxellib.pyaxel_close(pyaxel)
 
-def pyaxel_unlink(pyaxel):
-    if os.path.exists('%s.st' % pyaxel.file_name):
-        os.remove('%s.st' % pyaxel.file_name)
-    if os.path.exists(pyaxel.file_name):
-        os.remove(pyaxel.file_name)
+    for conn in pyaxel.conn:
+        conn.enabled = 0
+
+    if pyaxel.ready in (1, 3):
+        if os.path.exists('%s.st' % pyaxel.file_name):
+            os.remove('%s.st' % pyaxel.file_name)
+        if pyaxel.ready == 3:
+            if os.path.exists(pyaxel.file_name):
+                os.remove(pyaxel.file_name)
+    elif pyaxel.bytes_done > 0 and pyaxel.ready != -1:
+        pyaxel_save(pyaxel)
+
+    pyaxel.ready = -1
+
+    if pyaxel.outfd != -1:
+        os.close(pyaxel.outfd)
+        pyaxel.outfd = -1
+    for conn in pyaxel.conn:
+        pyaxellib.conn_disconnect(conn)
 
 def pyaxel_save(pyaxel):
+
     if not pyaxel.conn[0].supported:
         return
 
@@ -125,12 +156,17 @@ def pyaxel_save(pyaxel):
             bytes = [conn.current_byte for conn in pyaxel.conn]
             state = {
                 'num_connections': pyaxel.conf.num_connections,
-                'bytes_done': pyaxel.start_byte + sum([offset - conn.start_byte for offset, conn in zip(bytes, pyaxel.conn)]),
+                'bytes_done': pyaxel.bytes_start + sum([offset - conn.start_byte for offset, conn in zip(bytes, pyaxel.conn)]),
                 'current_byte': bytes
             }
             pickle.dump(state, fd)
     except IOError:
         pass
+
+def pyaxel_print(pyaxel):
+    messages = '\n'.join(pyaxel.message)
+    del pyaxel.message[:]
+    return messages
 
 def download_thread(pyaxel, conn):
     while conn.enabled == 1:

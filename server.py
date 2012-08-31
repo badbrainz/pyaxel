@@ -16,9 +16,11 @@ import threadpool
 import websocket
 
 
+SRV_VERSION = '1.0.0'
+
 # channel_c reply codes
-(ACK, OK, INVALID, BAD_REQUEST, ERROR, PROC, END, INCOMPLETE, STOPPED,
- UNDEFINED, INITIALIZING) = range(11)
+(INITIALIZING, ACK, OK, PROCESSING, END, CLOSING, INCOMPLETE, STOPPED, INVALID,
+BAD_REQUEST, ERROR, UNDEFINED) = range(12)
 
 # channel_c command inputs
 (IDENT, START, STOP, ABORT, QUIT) = range(5)
@@ -29,9 +31,9 @@ class StateMachineError(Exception):
 
 
 class TransitionError(StateMachineError):
-    def __init__(self, inp, cur, msg):
-        self.inp = inp
+    def __init__(self, cur, inp, msg):
         self.cur = cur
+        self.inp = inp
         self.msg = msg
 
 
@@ -66,7 +68,7 @@ class StateMachine:
                     action(self.state, inp, args)
                 self.state = newstate
             else:
-                raise TransitionError(self.inp, self.cur, 'input not recognized')
+                raise TransitionError(self.state, inp, 'input not recognized')
 
 
 class channel_c:
@@ -85,47 +87,39 @@ class channel_c:
         self.state.start('initial')
 
     def state_ident(self, state, inp, args):
-        if args and args.get('type') in ['ECHO', 'MGR', 'WKR']:
-            if args.get('type') == 'ECHO':
-                self.websocket.handle_response(deflate_msg({'event':OK,
-                    'data':args.get('msg')}))
-                self.websocket.disconnect()
-            elif args.get('type') == 'MGR':
-                self.state.start('initial')
-                msg = {'event':ACK}
-                if 'pref' in args:
-                    pass
-                if 'info' in args:
-                    msg['version'] = pyaxellib.PYAXEL_VERSION
-                self.websocket.handle_response(deflate_msg(msg))
-            else:
-                self.websocket.handle_response(deflate_msg({'event':ACK}))
+        if args.get('type') == 'ECHO':
+            self.websocket.handle_response(deflate_msg({'event':OK,'log':args.get('msg')}))
+            self.close()
         else:
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST}))
+            self.websocket.handle_response(deflate_msg({'event':ACK,
+                'version': SRV_VERSION}))
 
     # start/resume
     def state_start(self, state, inp, args):
+        #TODO require list of url strings
+
         self.websocket.handle_response(deflate_msg({'event':INITIALIZING}))
 
         url = args.get('url')
-        conf = pyaxellib.conf_t()
+        conf = args.get('conf')
 
-        pyaxellib.conf_init(conf)
-        if not pyaxellib.conf_load(conf, pyaxellib.PYAXEL_PATH + pyaxellib.PYAXEL_CONFIG):
+        config = pyaxellib.conf_t()
+        pyaxellib.conf_init(config)
+        if not pyaxellib.conf_load(config, pyaxellib.PYAXEL_PATH + pyaxellib.PYAXEL_CONFIG):
             raise Exception('couldn\'t load pyaxel config file')
 
-        self.axel = pyaxellib.pyaxel_new(conf, 0, url)
-        if self.axel.ready == -1:
-            pyaxellib.pyaxel_print(self.axel)
-            raise Exception(self.axel.last_error)
+        if conf:
+            for prop in conf:
+                setattr(config, prop, conf[prop])
 
-        pyaxellib.pyaxel_print(self.axel)
+        self.axel = pyaxellib.pyaxel_new(config, 0, url)
+        if self.axel.ready == -1:
+            raise Exception(self.axel.last_error)
 
         if not bool(os.stat(os.getcwd()).st_mode & stat.S_IWUSR):
             raise Exception('can\'t access protected directory: %s' % os.getcwd())
 
         if not pyaxel2.pyaxel_open(self.axel):
-            pyaxellib.pyaxel_print(self.axel)
             raise Exception(self.axel.last_error)
 
         # TODO send content-type header
@@ -134,30 +128,33 @@ class channel_c:
             'url': url,
             'name': self.axel.file_name,
             'type': 'test',
-            'size': self.axel.size,
-            'chunks': [conn.last_byte - conn.first_byte for conn in self.axel.conn],
-            'progress': [conn.current_byte - conn.first_byte for conn in self.axel.conn]
+            'size': self.axel.size
         }
-        self.websocket.handle_response(deflate_msg(msg))
+        if config.alternate_output == 0:
+            msg['chunks'] = [conn.last_byte - conn.first_byte for conn in self.axel.conn]
+            msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
+        elif config.alternate_output == 1:
+            msg['chunks'] = [sum([conn.last_byte - conn.first_byte for conn in self.axel.conn])]
+            msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in self.axel.conn])]
 
         pyaxel2.pyaxel_start(self.axel)
-        pyaxellib.pyaxel_print(self.axel)
+
+        msg['log'] = pyaxel2.pyaxel_print(self.axel)
+        self.websocket.handle_response(deflate_msg(msg))
 
     # pause
     def state_stop(self, state, inp, args):
         if self.axel:
-            print "Stopping:", self.axel.file_name
-            pyaxel2.pyaxel_close(self.axel)
-        self.websocket.handle_response(deflate_msg({"event":STOPPED}))
+            pyaxel2.pyaxel_stop(self.axel)
+            self.websocket.handle_response(deflate_msg({'event':CLOSING,
+                'log':pyaxel2.pyaxel_print(self.axel)}))
 
     # quit
     def state_abort(self, state, inp, args):
         if self.axel:
-            print "Aborting:", self.axel.file_name
-            pyaxel2.pyaxel_close(self.axel)
-            pyaxel2.pyaxel_unlink(self.axel)
-            self.axel = None
-        self.websocket.handle_response(deflate_msg({'event':INCOMPLETE}))
+            pyaxel2.pyaxel_abort(self.axel)
+            self.websocket.handle_response(deflate_msg({'event':CLOSING,
+                'log':pyaxel2.pyaxel_print(self.axel)}))
 
     # disconnect
     def state_quit(self, state, inp, args):
@@ -168,16 +165,19 @@ class channel_c:
             msg = inflate_msg(msg)
             self.state.execute(msg['cmd'], msg.get('arg'))
         except StateMachineError, e:
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'data':e}))
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':e}))
         except TransitionError, e:
             resp = '\'%s\' %s <state:%s>' % (e.inp, e.msg, e.cur)
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'data':resp}))
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':resp}))
         except Exception, e:
             import debug
             debug.backtrace()
             self.state.start('listening')
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'data':str(e)}))
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':str(e)}))
             self.close()
+
+    def chat_closed(self):
+        self.close()
 
     def chat_error(self):
         self.close()
@@ -188,29 +188,39 @@ class channel_c:
 
         if self.axel.active_threads:
             pyaxel2.pyaxel_do(self.axel)
-            msg = {
-                'event': PROC,
-                'progress': [conn.current_byte - conn.first_byte for conn in self.axel.conn],
-                'rate': format_size(self.axel.bytes_done / (time.time() - self.axel.start_time))
-            }
-            self.websocket.handle_response(deflate_msg(msg))
-            if self.axel.message:
-                pyaxellib.pyaxel_print(self.axel)
+            if self.axel.ready == 0:
+                msg = {
+                    'event': PROCESSING,
+                    'rate': format_size(self.axel.bytes_per_second),
+                    'log': pyaxel2.pyaxel_print(self.axel)
+                }
+                if self.axel.conf.alternate_output == 0:
+                    msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
+                elif self.axel.conf.alternate_output == 1:
+                    msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in self.axel.conn])]
+                self.websocket.handle_response(deflate_msg(msg))
             return
 
-        if self.axel.ready == 1:
-            self.websocket.handle_response(deflate_msg({'event':END}))
-        else:
-            self.websocket.handle_response(deflate_msg({'event':INCOMPLETE}))
+        if self.axel.ready == 1: # transfer successful
+            self.websocket.handle_response(deflate_msg({'event':END,
+                'log':pyaxel2.pyaxel_print(self.axel)}))
+        elif self.axel.ready == 2: # pause
+            self.websocket.handle_response(deflate_msg({"event":STOPPED,
+                'log':pyaxel2.pyaxel_print(self.axel)}))
+        elif self.axel.ready == 3: # cancel
+            self.websocket.handle_response(deflate_msg({'event':INCOMPLETE,
+                'log':pyaxel2.pyaxel_print(self.axel)}))
 
         pyaxel2.pyaxel_close(self.axel)
 
     def close(self, status=1000, reason=''):
-        if self.axel and self.axel.ready == 0:
+        if self.axel:
             pyaxel2.pyaxel_close(self.axel)
             self.axel = None
 
-        self.websocket.disconnect(status, reason)
+        if self.websocket.handshaken:
+            self.websocket.disconnect(status, reason)
+
         self.server.remove_channel(self)
 
 
@@ -240,6 +250,7 @@ class server_c(asyncore.dispatcher):
         while asyncore.socket_map:
             asyncore.loop(use_poll=True, timeout=1, count=1)
             for channel in self.channels:
+#                print 'start_service->looping channels'
                 channel.update()
 
     def stop_service(self):

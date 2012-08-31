@@ -1,6 +1,5 @@
 import asynchat, struct, hashlib, base64, array
 
-# http://tools.ietf.org/html/rfc6455#section-7.4.1
 CLS_NORM = 1000
 CLS_GOAWAY = 1001
 CLS_ERR = 1002
@@ -148,8 +147,9 @@ class AsyncChat(asynchat.async_chat):
         self.strat()
 
     def handle_close(self):
-        self.close() # to be safe
-        self._cleanup()
+#        self.close() # to be safe
+#        self._cleanup()
+        self.handler.chat_closed()
 
     def handle_error(self):
         self.handle_close()
@@ -158,7 +158,9 @@ class AsyncChat(asynchat.async_chat):
     def disconnect(self, status=CLS_NORM, reason=''):
         msg = struct.pack('>H%ds' % len(reason), status, reason)
         self.handle_response(msg, 0x08)
-        self.handle_close()
+#        self.handle_close()
+        self.close()
+        self._cleanup()
 
     def _cleanup(self):
         del self.app_data[:]

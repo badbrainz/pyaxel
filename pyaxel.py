@@ -22,8 +22,6 @@ except:
 from collections import deque
 #from ConfigParser import SafeConfigParser
 
-PYAXEL_VERSION = '1.0.0'
-PYAXEL_SVN = 'r'
 PYAXEL_PATH = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
 PYAXEL_CONFIG = 'pyaxel.cfg'
 PYAXEL_DEST = PYAXEL_PATH
@@ -63,7 +61,7 @@ def conf_init(conf):
     conf.default_filename = 'default'
     conf.verbose = 1
     conf.http_debug = 0
-    conf.alternate_output = 1
+    conf.alternate_output = 0
     conf.search_timeout = 10
     conf.search_threads = 3
     conf.search_amount = 15
@@ -119,7 +117,7 @@ def conf_load(conf, path):
 #        conf.http_proxy = 0
 #        conf.no_proxy = 0
 #        conf.default_filename = 'default'
-#        conf.alternate_output = 1
+#        conf.alternate_output = 0
 #        conf.search_timeout = 10
 #        conf.search_threads = 3
 #        conf.search_amount = 15
@@ -133,6 +131,7 @@ class pyaxel_t:
     #buffer = ''
     bytes_done = 0
     bytes_per_second = 0
+    bytes_start = 0
     conf = None
     conn = []
     delay_time = 0
@@ -145,7 +144,6 @@ class pyaxel_t:
     ready = 0
     save_state_interval = -1
     size = 0
-    start_byte = 0
     start_time = None
     url = ''
 
@@ -215,6 +213,7 @@ def pyaxel_open(pyaxel):
                 try:
                     st = pickle.load(fd)
                 except pickle.UnpicklingError:
+                    # TODO break from context
                     pass
 
                 pyaxel.conf.num_connections = st['num_connections']
@@ -278,7 +277,7 @@ def pyaxel_start(pyaxel):
             conn.last_transfer = time.time()
 
     pyaxel.start_time = time.time()
-    pyaxel.start_byte = pyaxel.bytes_done
+    pyaxel.bytes_start = pyaxel.bytes_done
     pyaxel.ready = 0
 
 def pyaxel_do(pyaxel):
@@ -357,8 +356,8 @@ def pyaxel_do(pyaxel):
                     conn_disconnect(conn)
                     conn.state = 0
 
-    pyaxel.bytes_per_second = (pyaxel.bytes_done - pyaxel.start_byte) / (time.time() - pyaxel.start_time)
-    pyaxel.finish_time = pyaxel.start_time + (pyaxel.size - pyaxel.start_byte) / pyaxel.bytes_per_second
+    pyaxel.bytes_per_second = (pyaxel.bytes_done - pyaxel.bytes_start) / (time.time() - pyaxel.start_time)
+    pyaxel.finish_time = pyaxel.start_time + (pyaxel.size - pyaxel.bytes_start) / pyaxel.bytes_per_second
 
     if pyaxel.conf.max_speed > 0:
         if pyaxel.bytes_per_second / pyaxel.conf.max_speed > 1.05:
@@ -821,5 +820,4 @@ def get_time_left(time_in_secs):
     return ret_str
 
 if __name__ == '__main__':
-    print 'pyaxel %s-%s' % (PYAXEL_VERSION, PYAXEL_SVN)
     sys.exit(main())

@@ -1,4 +1,3 @@
-/* helpers */
 var metercounter = 0;
 
 function createTextNode(value) {
@@ -25,7 +24,12 @@ function createFakeLink(onclick, value) {
 function createElementWithClassName(type, className, content) {
     var elm = document.createElement(type);
     elm.className = className;
-    typeof content !== 'undefined' && elm.appendChild(createTextNode(content));
+    if (typeof content !== 'undefined') {
+        if (typeof content === 'string')
+            elm.appendChild(createTextNode(content));
+        else
+            elm.innerHTML = content;
+    }
     return elm;
 }
 
@@ -54,7 +58,6 @@ function show(elem, show) {
     elem.style.display = show ? 'inline-block' : 'none';
 }
 
-/* Indicators */
 var Indicators = {};
 
 Indicators.Pie = {
@@ -72,7 +75,6 @@ Indicators.Bar = {
     width: 600
 };
 
-/* Display */
 var Display = {};
 Display.panels = {};
 
@@ -96,8 +98,8 @@ Display.clear = function() {
     }
 };
 
-Display.showResults = function(data) {
-    data.list.forEach(function(state) {
+Display.showResults = function(list) {
+    list.forEach(function(state) {
         Display.update(state);
     });
 };
@@ -108,11 +110,8 @@ Display.update = function(state) {
     else Display.panels[id] = new Panel(state);
 };
 
-/* Panel */
 var Panel = function(state) {
     this.state = state;
-    this.status = '';
-
     this.progress_bars = null;
 
     this.canvas = createCanvas(state.id, Indicators.Pie.width, Indicators.Pie.height);
@@ -141,8 +140,8 @@ var Panel = function(state) {
     labelsNode.appendChild(controlsNode);
 
     var title = createElementWithClassName('div', 'title');
-    this.labels.name = createElementWithClassName('div', 'name', state.name);
-    this.labels.size = createElementWithClassName('div', 'size dyninfo', state.size);
+    this.labels.name = createElementWithClassName('div', 'name', state.fname);
+    this.labels.size = createElementWithClassName('div', 'size dyninfo', formatBytes(state.fsize));
     this.labels.rate = createElementWithClassName('div', 'rate dyninfo', state.speed);
     this.labels.percent = createElementWithClassName('div', 'percent dyninfo', state.percent);
     title.appendChild(this.labels.percent);
@@ -160,6 +159,7 @@ var Panel = function(state) {
     };
     for (var i in controls)
         controlsNode.appendChild(controls[i]);
+    this.controlsNode = controlsNode;
     this.controls = controls;
 
     var pies = {
@@ -172,34 +172,27 @@ var Panel = function(state) {
     this.pies = pies;
     this.showIndicators(false);
 
-    this.labels.name.innerHTML = state.url.replace(/^.*\//, '');
     this.labels.progress.innerHTML = '&nbsp;';
     this.dateNode.innerHTML = state.date;
 
-    if (state.status === DownloadStatus.IN_PROGRESS || state.status === DownloadStatus.PAUSED || status === DownloadStatus.CONNECTING) {
-        this.labels.name.innerHTML = state.fname;
+    if (state.status === DownloadStatus.IN_PROGRESS ||
+        state.status === DownloadStatus.PAUSED ||
+        state.status === DownloadStatus.CONNECTING) {
         Display.activeNode.insertAdjacentElement('afterEnd', this.rootNode);
-        this.showIndicators(true);
     }
 
+    this.adjustDocPosition(state.status);
     this.update(state);
 };
 
 Panel.prototype = {
     update: function(state) {
-        this.state = state;
+        state.log && console.log(state.log);
+
         var status = state.status;
         var canvas = this.canvas;
         var labels = this.labels;
         var controls = this.controls;
-
-        if (this.status !== status) {
-            this.status = status;
-            this.adjustDocPosition(status);
-            labels.size.innerHTML = state.size;
-            labels.name.innerHTML = state.fname;
-            labels.status.innerHTML = this.getStatusText();
-        }
 
         var starting = status === DownloadStatus.INITIALIZING;
         var active = status === DownloadStatus.IN_PROGRESS;
@@ -207,32 +200,45 @@ Panel.prototype = {
         var done = status === DownloadStatus.COMPLETE;
         var inactive = status === DownloadStatus.QUEUED || status === DownloadStatus.CANCELLED;
 
-        if (starting) {
-            this.showIndicators(true);
+        var prev_status = this.state.status;
+        this.state = state;
+
+        if (prev_status !== status) {
+            this.adjustDocPosition(status);
+            labels.size.innerHTML = formatBytes(state.fsize);
+            labels.status.innerHTML = this.getStatusText();
         }
 
         // draw pie progress indicator
         if (idle || active) {
+            this.showIndicators(true);
             var pie = Indicators.Pie;
             canvas.clearRect(0, 0, pie.width, pie.height);
             canvas.beginPath();
             canvas.moveTo(pie.centerX, pie.centerY);
-            canvas.arc(pie.centerX, pie.centerY, pie.radius, pie.base, pie.base + pie.base2 * state.percentage, false);
+            var percent = state.fsize ? Math.floor(sum(state.progress) * 100 / state.fsize) : 0;
+            canvas.arc(pie.centerX, pie.centerY, pie.radius, pie.base, pie.base + pie.base2 * percent, false);
             canvas.lineTo(pie.centerX, pie.centerY);
             canvas.fill();
             canvas.closePath();
-            labels.percent.innerHTML = done ? '' : state.percentage + '% of&nbsp;';
-            labels.rate.innerHTML = '&nbsp;-&nbsp;' + state.speed + 'b/s&nbsp;';
+            labels.percent.innerHTML = done ? '' : percent + '% of';
+            labels.rate.innerHTML = '-&nbsp;' + state.speed + 'b/s';
+            show(labels.percent, true);
+            show(labels.rate, active);
+            show(labels.size, true);
         }
         else if (inactive || done) {
             this.showIndicators(false);
             labels.percent.innerHTML = '';
             labels.rate.innerHTML = '';
+            show(labels.percent, false);
+            show(labels.rate, false);
+            show(labels.size, false);
         }
 
         // draw progress bars
         if (!this.progress_bars) {
-            if (state.chunks.length > 0) {
+            if (state.chunks && state.chunks.length > 0) {
                 labels.progress.innerHTML = '';
                 var progressbar_count = state.chunks.length;
                 var percent = Math.floor((1 / progressbar_count) * 100);
@@ -252,15 +258,14 @@ Panel.prototype = {
                 delete this.progress_bars;
             }
             else {
-                this.progress_bars.forEach(function(e, i) {
-                    e.value = state.progress[i];
-                });
+                state.progress.forEach(function(e, i) {
+                    this.progress_bars[i].value = e;
+                }, this);
             }
         }
 
         // show link controls
         show(controls.pause, active);
-//        show(controls.pause, active && !idle);
         show(controls.resume, idle);
         show(controls.retry, inactive);
         show(controls.cancel, active || idle);
@@ -323,8 +328,6 @@ Panel.prototype = {
         switch (this.state.status) {
         case DownloadStatus.QUEUED:
             return 'Queued';
-        case DownloadStatus.CONNECTING:
-            return 'Connecting';
         case DownloadStatus.INITIALIZING:
             return 'Initializing';
         case DownloadStatus.IN_PROGRESS:
@@ -335,33 +338,39 @@ Panel.prototype = {
             return 'Cancelled';
         case DownloadStatus.PAUSED:
             return 'Paused';
-        case DownloadStatus.ERROR:
-            return 'Error';
         case DownloadStatus.UNDEFINED:
             return 'Undefined';
+        case DownloadStatus.CONNECTING:
+            return 'Connecting';
+        case DownloadStatus.ERROR:
+            return 'Error';
+        case DownloadStatus.CLOSING:
+            return 'Waiting for response';
         }
     },
 
     clear: function() {
-        // remove listeners
         this.rootNode.innerHTML = '';
     }
 };
 
-/* port connection */
 var port = null;
 
-function send(cmd, arg) {
-    port.postMessage({
-        cmd: cmd,
-        arg: arg
-    });
+function send(cmd, var_args) {
+    port.postMessage(Array.prototype.slice.call(arguments, 0));
 }
 
 document.addEventListener('DOMContentLoaded', function() {
     Display.init();
-    port = chrome.extension.connect();
+    port = chrome.extension.connect({'name':'downloads'});
     port.onMessage.addListener(Display.showResults);
+    document.getElementById('uri').onkeypress = function(e) {
+        if (e.keyCode == 13) {
+            var input = document.getElementById('uri');
+            send('add', input.value.trim());
+            input.value = '';
+        }
+    }
     document.getElementById('submit').onclick = function() {
         var input = document.getElementById('uri');
         send('add', input.value.trim());
@@ -371,5 +380,7 @@ document.addEventListener('DOMContentLoaded', function() {
         Display.clear();
         send('clear');
     }
-    send('update');
+    send('search', 'all');
 }, false);
+
+(new Image()).src = 'images/64.png';
