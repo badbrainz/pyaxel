@@ -45,30 +45,30 @@ class chanstate_c:
     def start(self, state):
         self.state = state
 
-    def add(self, state, inp, newstate, action=None):
+    def add(self, state, inp, next, action=None):
         try:
-            self.states[state][inp] = (newstate, action)
+            self.states[state][inp] = (next, action)
         except KeyError:
             self.states[state] = {}
-            self.states[state][inp] = (newstate, action)
+            self.states[state][inp] = (next, action)
 
     def execute(self, inp, args=()):
-        if self.state not in self.states:
-            raise StateMachineError('invalid state: %s' % self.state)
-        state = self.states[self.state]
+        if self.current_state not in self.states:
+            raise StateMachineError('invalid state: %s' % self.current_state)
+        state = self.states[self.current_state]
         if inp in state:
-            newstate, action = state[inp]
+            next, action = state[inp]
             if action is not None:
-                action(self.state, inp, args)
-            self.state = newstate
+                action(self.current_state, inp, args)
+            self.current_state = next
         else:
             if None in state:
-                newstate, action = state[None]
+                next, action = state[None]
                 if action is not None:
-                    action(self.state, inp, args)
-                self.state = newstate
+                    action(self.current_state, inp, args)
+                self.current_state = next
             else:
-                raise TransitionError(self.state, inp, 'input not recognized')
+                raise TransitionError(self.current_state, inp, 'input not recognized')
 
 
 class channel_c:
