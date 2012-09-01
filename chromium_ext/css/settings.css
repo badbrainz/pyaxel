@@ -2,12 +2,10 @@ body
 {
 	font-size:62.5%;
 	font-family:Arial,sans,verdana,serif;
-	margin:3% 24%
-}
+	margin: 3% 26%;}
 
 #main
 {
-	display:0;
 	font-size:1.3em;
 	text-shadow:#DDD 1px 1px 1px
 }
@@ -173,4 +171,5 @@ input#location:invalid,input#host:invalid,input#bandwidth:invalid,input#port:inv
 input#location,input#host,input#port,input#bandwidth
 {
 	padding:3px
+;margin: 2px 0;
 }

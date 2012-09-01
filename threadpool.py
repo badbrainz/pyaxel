@@ -1,3 +1,8 @@
+'''two bug fixes (wormboy):
+- line 113, incorrect exception name
+- line 126-127, possible race condition
+'''
+
 ## {{{ http://code.activestate.com/recipes/502291/ (r4)
 '''
 Yet another thread pool module.
@@ -16,7 +21,7 @@ the computed results, a L{generator <ThreadPool.iterProcessedJobs>} is used for
 popping the processed jobs from the output queue and yielding them back to the
 caller. The processed jobs encapsulate the computed result (or raised exception)
 and can be used transparently by the calling thread, as if the computation didn't
-take place in a different thread. This is more flexible than the callback-based
+take place in a different thread. This is more flexible that the callback-based
 approach since it gives full control to the caller of when to ask for a result,
 how long to wait for it and what to do with it once it is fetched.
 
@@ -79,8 +84,8 @@ class ThreadPool(object):
 
         @param num_workers: The number of worker threads to start initially.
         @param input_queue_size: If a positive integer, it's the maximum number
-            of unassigned jobs. The thread pool blocks when the queue is full and
-            a new job is submitted.
+            of unassigned jobs. The thread pool blocks when the queue is full a
+            new job is submitted.
         @param output_queue_size: If a positive integer, it's the maximum number
             of completed jobs waiting to be fetched. The thread pool blocks when
             the queue is full and a job is completed.
@@ -105,7 +110,7 @@ class ThreadPool(object):
         'Tell C{n} worker threads to quit after they finish with their current job.'
         for _ in xrange(n):
             try: self._workers.pop().dismissed = True
-            except KeyError: break
+            except IndexError: break
 
     @synchronized
     def addJob(self, job, timeout=None):
@@ -301,62 +306,4 @@ class Worker(threading.Thread):
             # thread blocks here if outputQueue is full
             self._outputQueue.put(job)
             _log.debug('Added job request %r to the output queue' % job.key)
-
-
-if __name__ == '__main__':
-    # demo
-    import random
-
-    # change the seed to get different sequence of results
-    random.seed(2)
-
-    # the work the workers threads will have to do
-    def slow_sqrt(num):
-        t = random.randrange(1,5)
-        log('%s: pretending to work hard on computing sqrt(%s) for %d seconds' %
-            (threading.currentThread().getName(),num,t))
-        time.sleep(t)
-        return num**0.5
-
-    # log each completed job
-    def job_done(job):
-        # job.result() will reraise any exception raised while the job was being
-        # processed; otherwise it will return the computed result
-        try:
-            return 'job #%s: result=%s' % (job.key, job.result())
-        except Exception, ex:
-            return 'job #%s: exception raised: %s' % (job.key, ex)
-
-    def log(msg, start=time.time()):
-        print '%.2f seconds elapsed: %s' % (time.time()-start, msg)
-
-    # create a pool of 3 worker threads
-    pool = ThreadPool(3)
-
-    # create 10 job requests and add them in the queue
-    for i in xrange(10):
-        num = random.randrange(-3,7)
-        pool.addJob(JobRequest(slow_sqrt, [num]))
-
-    # collect all processed jobs within 3.5 seconds
-    firstbatch = pool.processedJobs(timeout=3.5)
-    log('%d jobs done:' % len(firstbatch))
-    for job in firstbatch:
-        print '    ', job_done(job)
-    print '** %d active jobs after first batch' % pool.numActiveJobs()
-
-    # non-blocking iterator over processed jobs
-    for i in xrange(5):
-        for job in pool.iterProcessedJobs(timeout=0):
-            log('From non-blocking loop: %s' % job_done(job))
-        if pool.numActiveJobs():
-            log('Do something in the main thread; will check the pool again after a sec')
-            time.sleep(1)
-    print '** %d active jobs after second batch' % pool.numActiveJobs()
-
-    # blocking iterator over any remaining active jobs
-    for job in pool.iterProcessedJobs():
-        log('From blocking loop: %s' % job_done(job))
-    print '** %d active jobs after third batch' % pool.numActiveJobs()
 ## end of http://code.activestate.com/recipes/502291/ }}}
-
