@@ -17,7 +17,7 @@ class AsyncChat(asynchat.async_chat):
         #self.out_buffer = []
         self.handler = handler
         self.handshaken = False
-        self.strat = self.handle_request
+        self.state = self.parse_request_header
         self.set_terminator('\x0D\x0A\x0D\x0A')
 
     def handle_response(self, msg, opcode=0x01):
@@ -56,7 +56,7 @@ class AsyncChat(asynchat.async_chat):
 
         self.handshaken = True
         self.set_terminator(2)
-        self.strat = self.parse_frame_header
+        self.state = self.parse_frame_header
 
     def parse_frame_header(self, data):
         hi, lo = struct.unpack('BB', data)
@@ -101,13 +101,13 @@ class AsyncChat(asynchat.async_chat):
         header.append(length)
 
         if length <= 0x7D:
-            self.strat = self.parse_payload_masking_key
+            self.state = self.parse_payload_masking_key
             self.set_terminator(4)
         elif length == 0x7E:
-            self.strat = self.parse_payload_extended_len
+            self.state = self.parse_payload_extended_len
             self.set_terminator(2)
         else:
-            self.strat = self.parse_payload_extended_len
+            self.state = self.parse_payload_extended_len
             self.set_terminator(8)
 
         self.frame_header = header
@@ -115,12 +115,12 @@ class AsyncChat(asynchat.async_chat):
     def parse_payload_extended_len(self, data):
         fmt = '>H' if self.frame_header[2] == 0x7E else '>Q'
         self.frame_header[2] = struct.unpack(fmt, data)[0]
-        self.strat = self.parse_payload_masking_key
+        self.state = self.parse_payload_masking_key
         self.set_terminator(4)
 
     def parse_payload_masking_key(self, data):
         self.frame_header.append(data)
-        self.strat = self.parse_payload_data
+        self.state = self.parse_payload_data
         self.set_terminator(self.frame_header[2])
 
     def parse_payload_data(self, data):
@@ -134,13 +134,13 @@ class AsyncChat(asynchat.async_chat):
             del self.app_data[:]
             self.handler.chat_message(msg)
         self.set_terminator(2)
-        self.strat = self.parse_frame_header
+        self.state = self.parse_frame_header
 
     def collect_incoming_data(self, data):
         self.in_buffer.append(data)
 
     def found_terminator(self):
-        self.strat(''.join(self.in_buffer))
+        self.state(''.join(self.in_buffer))
         del self.in_buffer[:]
 
     def handle_close(self):
