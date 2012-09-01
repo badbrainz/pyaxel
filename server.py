@@ -37,7 +37,7 @@ class TransitionError(StateMachineError):
         self.msg = msg
 
 
-class StateMachine:
+class chanstate_c:
     def __init__(self):
         self.states = {}
         self.state = None
@@ -76,7 +76,7 @@ class channel_c:
         self.axel = None
         self.server = server
         self.websocket = websocket.AsyncChat(sock, self)
-        self.state = StateMachine()
+        self.state = chanstate_c()
         self.state.add('initial', IDENT, 'listening', self.state_ident)
         self.state.add('listening', START, 'established', self.state_start)
         self.state.add('listening', ABORT, 'listening', self.state_abort)
