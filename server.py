@@ -40,10 +40,10 @@ class TransitionError(StateMachineError):
 class chanstate_c:
     def __init__(self):
         self.states = {}
-        self.state = None
+        self.current_state = None
 
     def start(self, state):
-        self.state = state
+        self.current_state = state
 
     def add(self, state, inp, next, action=None):
         try:
