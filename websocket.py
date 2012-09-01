@@ -144,20 +144,18 @@ class AsyncChat(asynchat.async_chat):
         del self.in_buffer[:]
 
     def handle_close(self):
-#        self.close() # to be safe
-#        self._cleanup()
+        self._cleanup()
         self.handler.chat_closed()
 
     def handle_error(self):
-        self.handle_close()
         self.handler.chat_error()
 
     def disconnect(self, status=CLS_NORM, reason=''):
-        msg = struct.pack('>H%ds' % len(reason), status, reason)
-        self.handle_response(msg, 0x08)
-#        self.handle_close()
-        self.close()
-        self._cleanup()
+        if self.handshaken:
+            msg = struct.pack('>H%ds' % len(reason), status, reason)
+            self.handle_response(msg, 0x08)
+            self.close()
+            self._cleanup()
 
     def _cleanup(self):
         del self.app_data[:]
@@ -167,8 +165,3 @@ class AsyncChat(asynchat.async_chat):
         except AttributeError:
             pass
         self.handshaken = False
-
-    def _get_input(self):
-        data = ''.join(self.in_buffer)
-        del self.in_buffer[:]
-        return data
