@@ -32,8 +32,7 @@ class AsyncChat(asynchat.async_chat):
             header += struct.pack('>BQ', 0x7F, length)
         self.push(header + msg)
 
-    def handle_request(self):
-        data = self._get_input()
+    def parse_request_header(self, data):
         crlf = '\x0D\x0A'
 
         # TODO validate GET
@@ -59,8 +58,8 @@ class AsyncChat(asynchat.async_chat):
         self.set_terminator(2)
         self.strat = self.parse_frame_header
 
-    def parse_frame_header(self):
-        hi, lo = struct.unpack('BB', self._get_input())
+    def parse_frame_header(self, data):
+        hi, lo = struct.unpack('BB', data)
 
         # no extensions
         if hi & 0x70:
@@ -113,21 +112,18 @@ class AsyncChat(asynchat.async_chat):
 
         self.frame_header = header
 
-    def parse_payload_extended_len(self):
-        length = self._get_input()
+    def parse_payload_extended_len(self, data):
         fmt = '>H' if self.frame_header[2] == 0x7E else '>Q'
-        self.frame_header[2] = struct.unpack(fmt, length)[0]
+        self.frame_header[2] = struct.unpack(fmt, data)[0]
         self.strat = self.parse_payload_masking_key
         self.set_terminator(4)
 
-    def parse_payload_masking_key(self):
-        key = self._get_input()
-        self.frame_header.append(key)
+    def parse_payload_masking_key(self, data):
+        self.frame_header.append(data)
         self.strat = self.parse_payload_data
         self.set_terminator(self.frame_header[2])
 
-    def parse_payload_data(self):
-        data = self._get_input()
+    def parse_payload_data(self, data):
         bytes = array.array('B', data)
         mask = array.array('B', self.frame_header[3])
         bytes = [chr(b ^ mask[i % 4]) for i, b in enumerate(bytes)]
@@ -144,7 +140,8 @@ class AsyncChat(asynchat.async_chat):
         self.in_buffer.append(data)
 
     def found_terminator(self):
-        self.strat()
+        self.strat(''.join(self.in_buffer))
+        del self.in_buffer[:]
 
     def handle_close(self):
 #        self.close() # to be safe
