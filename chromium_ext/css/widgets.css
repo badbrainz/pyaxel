@@ -62,17 +62,19 @@ input[type="search"]
 	color:darkGray
 }
 
-input[type="url"]:required:valid
+input[type="url"]:required:valid,
+input[type="text"]:required:valid
 {
 	background:lightyellow url(../images/correct.png) right center no-repeat
 }
 
-input[type="url"]:invalid
+input[type="url"]:invalid,
+input[type="text"]:invalid
 {
-	background:#ffe8ea url(../images/incorrect.png) right center no-repeat
-}
+	background: hsl(355, 100%, 98%) url(../images/incorrect.png) right center no-repeat;}
 
-input[type="url"]::-webkit-input-placeholder
+input[type="url"]::-webkit-input-placeholder,
+input[type="text"]::-webkit-input-placeholder
 {
-	color:#789
+	color:darkGray
 }

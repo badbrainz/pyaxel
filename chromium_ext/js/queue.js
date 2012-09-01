@@ -8,10 +8,6 @@ Queue.prototype = {
     return this.queue.length - this.space;
   },
 
-  empty: function() {
-    return (this.queue.length < 1);
-  },
-
   put: function(element) {
     this.queue.push(element);
   },

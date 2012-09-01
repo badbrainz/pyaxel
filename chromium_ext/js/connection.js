@@ -1,111 +1,85 @@
+// NOTE data sent over closed socket increases bufferedAmount.
+
 var Connection = function(endpoint, retries, seconds) {
     this.connevent = new Event(this);
     this.msgevent = new Event(this);
     this.endpoint = endpoint;
-    this.retries = retries;
-    this.interval = seconds * 1e3;
-    //this.download = null;
+    this.retries = ~~retries || 0;
+    this.interval = (~~seconds || 5) * 1e3;
 };
 
-Connection.prototype = {
-    connect: function() {
-        this.websocket = new WebSocket(this.endpoint);
-        this.websocket.onopen = this.networkEventHandler.onopen.bind(this);
-        this.websocket.onclose = this.networkEventHandler.onclose.bind(this);
-        this.websocket.onerror = this.networkEventHandler.onerror.bind(this);
-        this.websocket.onmessage = this.networkEventHandler.onmessage.bind(this);
-        this.intervalID = setInterval((function() {
-            if (!this.websocket || this.websocket.readyState !== ConnectionState.OPEN) {
-                clearInterval(this.intervalID);
-                this.connevent.notify({
-                    event: ConnectionEvent.ERROR
-                });
-            }
-        }).bind(this), this.interval);
-    },
+Connection.prototype.connect = function() {
+    if (this.websocket)
+        return;
 
-    send: function(msg) {
-        if (!this.websocket) return;
+    var nethandler = this.networkEventHandler;
+
+    var sock = new WebSocket(this.endpoint);
+    sock.addEventListener('open', nethandler.onopen.bind(this), false);
+    sock.addEventListener('close', nethandler.onclose.bind(this), false);
+    sock.addEventListener('error', nethandler.onerror.bind(this), false);
+    sock.addEventListener('message', nethandler.onmessage.bind(this), false);
+
+    this.websocket = sock;
+//    this.tid = window.setInterval(nethandler.ontimeout.bind(this), this.interval);
+//    if (this.retries)
+//        this.attempt = 1;
+};
+
+Connection.prototype.send = function(msg) {
+    if (!this.websocket)
+        return;
+
+    if (this.websocket.readyState === WebSocketEvent.OPEN)
         this.websocket.send(JSON.stringify(msg));
+};
+
+Connection.prototype.networkEventHandler = {
+    onopen: function() {
+        this.established = true;
+        this.connevent.notify({
+            event: ConnectionEvent.CONNECTED
+        });
     },
 
-    prepare: function(payload) {
-        this.download = payload;
+    onmessage: function(event) {
+        this.msgevent.notify(JSON.parse(event.data));
     },
 
-    resume: function() {
-        var msg = {
-            cmd: ServerCommand.START,
-            arg: {
-                url: this.download.url
-            }
-        };
-        if (this.download.fname !== '') msg.arg.name = this.download.fname;
-        this.send(msg);
+    onerror: function(event) {
+        this.connevent.notify({
+            event: ConnectionEvent.ERROR,
+            msg: event,
+            args: arguments
+        });
     },
 
-    pause: function() {
-        var msg = {
-            cmd: ServerCommand.STOP
-        };
-        this.send(msg);
-    },
-
-    abort: function() {
-        var msg = {
-            cmd: ServerCommand.ABORT
-        };
-        this.send(msg);
-    },
-
-    disconnect: function() {
-        var msg = {
-            cmd: ServerCommand.QUIT
-        };
-        this.send(msg);
-    },
-
-    destroy: function() {
+    onclose: function(event) {
+        var closeType = this.established ? ConnectionEvent.DISCONNECTED : ConnectionEvent.ERROR;
+        delete this.established;
         if (this.websocket) {
-            if (this.websocket.readyState === ConnectionState.OPEN)
-                this.disconnect();
+            if (this.websocket.readyState === WebSocketEvent.OPEN)
+                this.send({
+                    cmd: ServerCommand.QUIT
+                });
             delete this.websocket;
         }
-        if (this.intervalID) {
-            clearInterval(this.intervalID);
-            delete this.intervalID;
+        if (this.tid) {
+            window.clearInterval(this.tid);
+            delete this.tid;
         }
-        this.download = null;
+        this.connevent.notify({
+            event: closeType,
+            args: arguments
+        });
     },
 
-    networkEventHandler: {
-        onopen: function() {
-            this.established = true;
+    ontimeout: function() {
+        if (!this.established) {
+            window.clearInterval(this.tid);
+            delete this.tid;
             this.connevent.notify({
-                event: ConnectionEvent.CONNECTED
-            });
-        },
-
-        onmessage: function(msg) {
-            this.msgevent.notify(JSON.parse(msg.data));
-        },
-
-        onerror: function(msg) {
-            this.connevent.notify({
-                event: ConnectionEvent.ERROR,
-                msg: msg
-            });
-        },
-
-        onclose: function() {
-            var event = this.established ? ConnectionEvent.DISCONNECTED : ConnectionEvent.ERROR;
-            delete this.established;
-            if (this.intervalID) {
-                clearInterval(this.intervalID);
-                delete this.intervalID;
-            }
-            this.connevent.notify({
-                event: event
+                event: ConnectionEvent.ERROR
             });
         }
     }
