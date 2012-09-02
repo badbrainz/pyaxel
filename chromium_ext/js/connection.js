@@ -14,13 +14,12 @@ Connection.prototype.connect = function() {
 
     var nethandler = this.networkEventHandler;
 
-    var sock = new WebSocket(this.endpoint);
-    sock.addEventListener('open', nethandler.onopen.bind(this), false);
-    sock.addEventListener('close', nethandler.onclose.bind(this), false);
-    sock.addEventListener('error', nethandler.onerror.bind(this), false);
-    sock.addEventListener('message', nethandler.onmessage.bind(this), false);
+    this.websocket = new WebSocket(this.endpoint);
+    this.websocket.addEventListener('open', nethandler.onopen.bind(this), false);
+    this.websocket.addEventListener('close', nethandler.onclose.bind(this), false);
+    this.websocket.addEventListener('error', nethandler.onerror.bind(this), false);
+    this.websocket.addEventListener('message', nethandler.onmessage.bind(this), false);
 
-    this.websocket = sock;
 //    this.tid = window.setInterval(nethandler.ontimeout.bind(this), this.interval);
 //    if (this.retries)
 //        this.attempt = 1;
@@ -58,10 +57,6 @@ Connection.prototype.networkEventHandler = {
         var closeType = this.established ? ConnectionEvent.DISCONNECTED : ConnectionEvent.ERROR;
         delete this.established;
         if (this.websocket) {
-            if (this.websocket.readyState === WebSocketEvent.OPEN)
-                this.send({
-                    cmd: ServerCommand.QUIT
-                });
             delete this.websocket;
         }
         if (this.tid) {
