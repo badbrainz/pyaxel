@@ -156,7 +156,6 @@ class AsyncChat(asynchat.async_chat):
             status, reason = self.last_error
             msg = struct.pack('>H%ds' % len(reason), status, reason)
             self.handle_response(msg, 0x08)
-        self.close()
         self.handle_close()
 
     def disconnect(self, status=1000, reason=''):
