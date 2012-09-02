@@ -220,7 +220,8 @@ class channel_c:
             if established and self.state.current_state == 'established':
                 self.websocket.handle_response(deflate_msg({"event":INCOMPLETE}))
             self.websocket.disconnect(status, reason)
-            self.server.remove_channel(self)
+
+        self.server.remove_channel(self)
 
 
 class server_c(asyncore.dispatcher):
@@ -259,7 +260,8 @@ class server_c(asyncore.dispatcher):
             c.close(status=1001, reason='server shutdown')
 
     def remove_channel(self, channel):
-        self.channels.remove(channel)
+        if channel in self.channels:
+            self.channels.remove(channel)
 
 
 def format_size(num, prefix=True):
