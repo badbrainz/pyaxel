@@ -58,7 +58,7 @@ class AsyncChat(asynchat.async_chat):
 
         self.handshaken = True
         self.set_terminator(2)
-        self.state = self.parse_frame_header1000
+        self.state = self.parse_frame_header
 
     def parse_frame_header(self, data):
         hi, lo = struct.unpack('BB', data)
