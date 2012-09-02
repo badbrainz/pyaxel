@@ -59,8 +59,11 @@ jobqueue.clear = function() {
 };
 
 jobqueue.search = function(id) {
-    if (typeof id === 'string' && id in jobqueue.catalog)
-        return getValues(jobqueue.catalog[id]);
+    if (typeof id === 'string') {
+        if (id in jobqueue.catalog)
+            return getValues(jobqueue.catalog[id]);
+        return [];
+    }
     return jobqueue.catalog.all[id];
 };
 
