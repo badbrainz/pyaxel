@@ -179,9 +179,6 @@ class channel_c:
     def chat_closed(self):
         self.close()
 
-    def chat_error(self):
-        self.close()
-
     def update(self):
         if not self.axel or self.axel.ready == -1:
             return
@@ -223,8 +220,7 @@ class channel_c:
             if established and self.state.current_state == 'established':
                 self.websocket.handle_response(deflate_msg({"event":INCOMPLETE}))
             self.websocket.disconnect(status, reason)
-
-        self.server.remove_channel(self)
+            self.server.remove_channel(self)
 
 
 class server_c(asyncore.dispatcher):
