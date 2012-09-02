@@ -214,11 +214,13 @@ class channel_c:
         pyaxel2.pyaxel_close(self.axel)
 
     def close(self, status=1000, reason=''):
-        if self.axel and self.axel.ready == 0:
+        established = self.axel and self.axel.ready == 0
+
+        if established:
             pyaxel2.pyaxel_close(self.axel)
 
         if self.websocket.handshaken:
-            if self.state.current_state == 'established':
+            if established and self.state.current_state == 'established':
                 self.websocket.handle_response(deflate_msg({"event":INCOMPLETE}))
             self.websocket.disconnect(status, reason)
 
