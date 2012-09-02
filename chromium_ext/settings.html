@@ -1,0 +1,81 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>PyAxelWS - Preferences</title>
+        <link type="text/css" rel="stylesheet" href="css/widgets.css" />
+        <link type="text/css" rel="stylesheet" href="css/settings.css" />
+        <script type="text/javascript" src="js/utils.js"></script>
+        <script type="text/javascript" src="js/regex.js"></script>
+        <script type="text/javascript" src="js/broadcaster.js"></script>
+        <script type="text/javascript" src="js/storage.js"></script>
+        <script type="text/javascript" src="js/settings.js"></script>
+        <script type="text/javascript" src="js/connection.js"></script>
+    </head>
+    <body>
+        <img src="images/64.png" width=64 height=64 style="position:absolute;top:8px;left:8px"/>
+        <div id="main" class="flex-v">
+            <div id="infoTip" class=""></div>
+            <div class="flex flex-h tabbar">
+                <div class="flex tab" id="tab0">Settings</div>
+                <div class="flex tab" id="tab1">Manual</div>
+                <div class="flex tab" id="tab2">About</div>
+            </div>
+            <div class="flex-v panel" id="panel0">
+                <div class="flex flex-h">
+                    <div class="hbox-2">
+                        <span class="flex">Host:</span>
+                        <input id="host" type="text" placeholder="Enter a valid IP" pattern="(([01]?\d\d?|2[0-4]\d|25[0-5])\.){3}([01]?\d\d?|25[0-5]|2[0-4]\d)">
+                    </div>
+                    <div class="hbox-2">
+                        <span class="flex">Port:</span>
+                        <input id="port" type="text" pattern="\d+">
+                    </div>
+                    <div class="flex vbox-1">
+                        <div class="flex hbox-1" style="padding-bottom:2px;">
+                            <button id="echo">Test connection</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-v">
+                    <span class="flex">Download location:</span>
+                    <input type="text" id="location" class="flex" placeholder="Enter a valid path name" pattern="(?:[a-zA-Z]+:)?\/(?:[\w\-]+\/)*">
+                </div>
+                <div class="flex flex-h">
+                    <div class="hbox-2">
+                        <span class="flex">Max splits per download:</span>
+                        <input id="splits" type="number" size="8" min="1" max="6" value="4" oninput="check_number_input(this)">
+                    </div>
+                    <div>
+                        <span class="flex">Max simultaneous downloads:</span>
+                        <input id="downloads" type="number" size="50" min="1" max="50" value="4" oninput="check_number_input(this)">
+                    </div>
+                </div>
+                <div class="flex flex-v">
+                    <span class="flex">Bandwidth cap:</span>
+                    <div class="flex">
+                        <input id="bandwidth" type="text" pattern="\d+"><span style="margin-left:.5em">kB/s</span>
+                    </div>
+                </div>
+                <div class="flex">
+                    <button id="save">Save settings</button>
+                </div>
+            </div>
+            <div class="flex-v panel" id="panel1">
+                <p class="flex">Before you begin using pyaxelws, be sure to download the <a href="http://goo.gl/a4Ao6">pyaxelws Python scripts</a>. You'll also need <a href="http://www.python.org/download/">Python (2.x series)</a> installed. Once these requirements have been fulfilled, simply open a command prompt and run the <i>server.py</i> script.<br><blockquote>python server.py</blockquote></p>
+                <p class="flex">The default port number that the server will listen on is <i>8002</i>. If you recieve an error stating that the address is already in use, then try another port. Use the "p" option to set the port. For example:<br><blockquote>python server.py -p 8003</blockquote></p>
+                <p class="flex" style="text-indent:0">To see a full list of configuration options, use the "h" option:<br><blockquote>python server.py -h</blockquote></p>
+                <p class="flex">After the port setting has been configured properly, you're ready to test the connection using the web browser. From the settings page, which you're viewing now, enter the port number and then press the <i>Test Connection</i> button.</p>
+            </div>
+            <div class="flex-v panel" id="panel2">
+                <div class="flex">Version <span id="version"></span><br><input type="checkbox" id="update"><label>Check for updates automatically.</label></div>
+                <p class="flex">The original <b>pyaxel</b> is a CLI-based download accelerator in Python that works seamlessly in networks that are behind proxy servers and for protocols like http and ftp. Features present in pyaxel 0.1 are accelerated downloads, persistent reconnection, resumable downloads, download speed limiting, and download progress indication.</p>
+                <p class="flex"><b>Pyaxelws</b> is a pyaxel clone that introduces new features such as an HTML5 Websocket server, and a client application designed for the Chromium web browser.</p>
+                <div class="flex flex-v">
+                    <h3 class="flex">Links:</h3>
+                    <div>pyaxel, <a href="http://code.google.com/p/pyaxel/">http://code.google.com/p/pyaxel/</a></div>
+                    <div>pyaxelws, <a href="http://code.google.com/p/pyaxelws/">http://code.google.com/p/pyaxelws/</a></div>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
