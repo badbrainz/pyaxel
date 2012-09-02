@@ -147,6 +147,7 @@ class AsyncChat(asynchat.async_chat):
         del self.in_buffer[:]
 
     def handle_close(self):
+        self.close()
         self._cleanup()
         self.handler.chat_closed()
 
