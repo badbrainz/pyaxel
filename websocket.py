@@ -23,7 +23,7 @@ class AsyncChat(asynchat.async_chat):
         self.set_terminator('\x0D\x0A\x0D\x0A')
 
     def handle_response(self, msg, opcode=0x01):
-        if not if self.handshaken:
+        if not self.handshaken:
             return
 
         header = chr(0x80 | opcode)
