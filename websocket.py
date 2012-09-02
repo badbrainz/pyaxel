@@ -19,7 +19,6 @@ class AsyncChat(asynchat.async_chat):
         self.in_buffer = []
         self.payload_buffer = []
         self.handshaken = False
-        self.last_error = (1000, '')
         self.state = self.parse_request_header
         self.set_terminator('\x0D\x0A\x0D\x0A')
 
@@ -149,7 +148,12 @@ class AsyncChat(asynchat.async_chat):
         self.handler.chat_closed()
 
     def handle_error(self):
-        self.handler.chat_error()
+        if hasattr(self, 'last_error'):
+            status, reason = self.last_error
+            msg = struct.pack('>H%ds' % len(reason), status, reason)
+            self.handle_response(msg, 0x08)
+        self.close()
+        self.handle_close()
 
     def disconnect(self, status=1000, reason=''):
         if self.handshaken:
@@ -161,8 +165,8 @@ class AsyncChat(asynchat.async_chat):
     def _cleanup(self):
         del self.payload_buffer[:]
         del self.in_buffer[:]
-        try:
+        if hasattr(self, 'last_error'):
+            del self.last_error
+        if hasattr(self, 'frame_header'):
             del self.frame_header
-        except AttributeError:
-            pass
         self.handshaken = False
