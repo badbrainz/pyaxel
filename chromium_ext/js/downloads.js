@@ -1,5 +1,3 @@
-var metercounter = 0;
-
 function createTextNode(value) {
     value = typeof value !== 'undefined' ? value : '';
     return document.createTextNode(value);
@@ -33,16 +31,6 @@ function createElementWithClassName(type, className, content) {
     return elm;
 }
 
-//function createMeter(min, max, val) {
-//    var elm = document.createElement('meter');
-//    elm.innerHTML = 'mc_' + metercounter++;
-//    //elm.min = min;
-//    //elm.max = max;
-//    elm.value = val || 0;
-//    elm.style.display = 'inline-block';
-//    return elm;
-//}
-
 function createProgress(max, val) {
     var elm = document.createElement('progress');
     elm.max = max;
@@ -58,9 +46,34 @@ function show(elem, show) {
     elem.style.display = show ? 'inline-block' : 'none';
 }
 
-var Indicators = {};
+function getStatusText(status) {
+    switch (status) {
+    case DownloadStatus.QUEUED:
+        return 'Queued';
+    case DownloadStatus.INITIALIZING:
+        return 'Initializing';
+    case DownloadStatus.IN_PROGRESS:
+        return 'In progress';
+    case DownloadStatus.COMPLETE:
+        return 'Completed';
+    case DownloadStatus.CANCELLED:
+        return 'Cancelled';
+    case DownloadStatus.PAUSED:
+        return 'Paused';
+    case DownloadStatus.UNDEFINED:
+        return 'Undefined';
+    case DownloadStatus.CONNECTING:
+        return 'Connecting';
+    case DownloadStatus.ERROR:
+        return 'Error';
+    case DownloadStatus.CLOSING:
+        return 'Waiting for response';
+    }
+}
 
-Indicators.Pie = {
+var indicators = {};
+
+indicators.Pie = {
     width: 48,
     height: 48,
     radius: 24,
@@ -71,50 +84,47 @@ Indicators.Pie = {
     dir: false
 };
 
-Indicators.Bar = {
+indicators.Bar = {
     width: 600
 };
 
-var Display = {};
-Display.panels = {};
+var panels = {};
+var display = {};
 
-Display.init = function() {
-    Display.activeNode = document.getElementById('active');
-    Display.queuedNode = document.getElementById('queued');
-    Display.completedNode = document.getElementById('completed');
-    Display.cancelledNode = document.getElementById('cancelled');
+display.init = function() {
+    display.activeNode = document.getElementById('active');
+    display.queuedNode = document.getElementById('queued');
+    display.completedNode = document.getElementById('completed');
+    display.cancelledNode = document.getElementById('cancelled');
 };
 
-Display.remove = function(id) {
-    var displayNode = document.getElementById('display');
-    displayNode.removeChild(Display.panels[id].rootNode)
-    delete Display.panels[id];
+display.remove = function(id) {
+    document.getElementById('display').removeChild(panels[id].rootNode)
+    delete panels[id];
 };
 
-Display.clear = function() {
-    for (var id in Display.panels) {
-        Display.panels[id].clear();
-        Display.remove(id);
+display.clear = function() {
+    for (var id in panels) {
+        panels[id].clear();
+        display.remove(id);
     }
 };
 
-Display.showResults = function(list) {
-    list.forEach(function(state) {
-        Display.update(state);
-    });
+display.showResults = function(list) {
+    list.forEach(display.update);
 };
 
-Display.update = function(state) {
+display.update = function(state) {
     var id = state.id;
-    if (id in Display.panels) Display.panels[id].update(state);
-    else Display.panels[id] = new Panel(state);
+    if (id in panels) panels[id].update(state);
+    else panels[id] = new Panel(state);
 };
 
-var Panel = function(state) {
+function Panel(state) {
     this.state = state;
     this.progress_bars = null;
 
-    this.canvas = createCanvas(state.id, Indicators.Pie.width, Indicators.Pie.height);
+    this.canvas = createCanvas(state.id, indicators.Pie.width, indicators.Pie.height);
 
     this.pieNode = createElementWithClassName('div', 'pie');
     this.rootNode = createElementWithClassName('div', 'panel');
@@ -130,7 +140,7 @@ var Panel = function(state) {
 
     var labels = {
         url: createLink(null, state.url, state.url),
-        status: createElementWithClassName('div', 'status', this.getStatusText()),
+        status: createElementWithClassName('div', 'status', getStatusText(state.status)),
         progress: createElementWithClassName('div', 'progress', state.progress)
     };
     labels.url.className = 'url';
@@ -166,192 +176,153 @@ var Panel = function(state) {
         background: createElementWithClassName('div', 'background'),
         foreground: createElementWithClassName('div', 'foreground')
     };
-    pies.foreground.style.webkitMask = '-webkit-canvas(canvas_' + state.id + ')';
+    pies.foreground.style.webkitMask = formatString('-webkit-canvas(canvas_{0})', state.id);
     for (var i in pies)
         this.pieNode.appendChild(pies[i]);
     this.pies = pies;
-    this.showIndicators(false);
+    this.showindicators(false);
 
     this.labels.progress.innerHTML = '&nbsp;';
     this.dateNode.innerHTML = state.date;
 
-    if (state.status === DownloadStatus.IN_PROGRESS ||
-        state.status === DownloadStatus.PAUSED ||
-        state.status === DownloadStatus.CONNECTING) {
-        Display.activeNode.insertAdjacentElement('afterEnd', this.rootNode);
-    }
-
     this.adjustDocPosition(state.status);
     this.update(state);
+}
+
+Panel.prototype.update = function(state) {
+    state.log && console.log(state.log);
+
+    var status = state.status;
+    var labels = this.labels;
+
+    var active = status === DownloadStatus.IN_PROGRESS;
+    var idle = status === DownloadStatus.PAUSED;
+    var done = status === DownloadStatus.COMPLETE;
+    var inactive = status === DownloadStatus.QUEUED || status === DownloadStatus.CANCELLED;
+
+    var prev_status = this.state.status;
+    this.state = state;
+
+    if (prev_status !== status) {
+        this.adjustDocPosition(status);
+        labels.size.innerHTML = formatBytes(state.fsize);
+        labels.status.innerHTML = getStatusText(status);
+    }
+
+    if (idle || active) {
+        this.showindicators(true);
+        var pie = indicators.Pie;
+        var canvas = this.canvas;
+        canvas.clearRect(0, 0, pie.width, pie.height);
+        canvas.beginPath();
+        canvas.moveTo(pie.centerX, pie.centerY);
+        var percent = state.fsize ? Math.floor(sum(state.progress) * 100 / state.fsize) : 0;
+        canvas.arc(pie.centerX, pie.centerY, pie.radius, pie.base, pie.base + pie.base2 * percent, false);
+        canvas.lineTo(pie.centerX, pie.centerY);
+        canvas.fill();
+        canvas.closePath();
+        labels.percent.innerHTML = done ? '' : percent + '% of';
+        labels.rate.innerHTML = '-&nbsp;' + state.speed + 'b/s';
+        show(labels.percent, true);
+        show(labels.rate, active);
+        show(labels.size, true);
+    }
+    else if (inactive || done) {
+        this.showindicators(false);
+        labels.percent.innerHTML = '';
+        labels.rate.innerHTML = '';
+        show(labels.percent, false);
+        show(labels.rate, false);
+        show(labels.size, false);
+    }
+
+    if (!this.progress_bars) {
+        if (state.chunks && state.chunks.length > 0) {
+            labels.progress.innerHTML = '';
+            var progressbar_count = state.chunks.length;
+            var percent = Math.floor((1 / progressbar_count) * 100);
+            this.progress_bars = state.chunks.map(function(e) {
+                var node = labels.progress.appendChild(createProgress(e, 0));
+                node.style.width = percent + '%';
+                return node;
+            });
+            labels.progress.style.width = indicators.Bar.width + 'px';
+        }
+    }
+    if (this.progress_bars) {
+        if (done || inactive) {
+            this.progress_bars.forEach(function(e) {
+                e.parentNode.removeChild(e);
+            });
+            delete this.progress_bars;
+        }
+        else {
+            state.progress.forEach(function(e, i) {
+                this.progress_bars[i].value = e;
+            }, this);
+        }
+    }
+
+    // show link controls
+    var controls = this.controls;
+    show(controls.pause, active);
+    show(controls.resume, idle);
+    show(controls.retry, inactive);
+    show(controls.cancel, active || idle);
+    show(controls.remove, inactive || done);
+}
+
+Panel.prototype.adjustDocPosition = function(status) {
+    switch (status) {
+    case DownloadStatus.QUEUED:
+        display.queuedNode.insertAdjacentElement('afterEnd', this.rootNode);
+        break;
+    case DownloadStatus.CONNECTING:
+    case DownloadStatus.INITIALIZING:
+    case DownloadStatus.IN_PROGRESS:
+    case DownloadStatus.PAUSED:
+        display.activeNode.insertAdjacentElement('afterEnd', this.rootNode);
+        break;
+    case DownloadStatus.COMPLETE:
+        display.completedNode.insertAdjacentElement('afterEnd', this.rootNode);
+        break;
+    case DownloadStatus.CANCELLED:
+        display.cancelledNode.insertAdjacentElement('afterEnd', this.rootNode);
+        break;
+    }
 };
 
-Panel.prototype = {
-    update: function(state) {
-        state.log && console.log(state.log);
+Panel.prototype.showindicators = function(show) {
+    var str = show ? 'block' : 'none';
+    this.pies.foreground.style.display = str;
+    this.pies.background.style.display = str;
+    this.labels.progress.style.display = str;
+};
 
-        var status = state.status;
-        var canvas = this.canvas;
-        var labels = this.labels;
-        var controls = this.controls;
+Panel.prototype.cancel = function() {
+    send('cancel', this.state.id);
+};
 
-        var starting = status === DownloadStatus.INITIALIZING;
-        var active = status === DownloadStatus.IN_PROGRESS;
-        var idle = status === DownloadStatus.PAUSED;
-        var done = status === DownloadStatus.COMPLETE;
-        var inactive = status === DownloadStatus.QUEUED || status === DownloadStatus.CANCELLED;
+Panel.prototype.retry = function() {
+    send('retry', this.state.id);
+    //display.remove(this.state.id);
+};
 
-        var prev_status = this.state.status;
-        this.state = state;
+Panel.prototype.pause = function() {
+    send('pause', this.state.id);
+};
 
-        if (prev_status !== status) {
-            this.adjustDocPosition(status);
-            labels.size.innerHTML = formatBytes(state.fsize);
-            labels.status.innerHTML = this.getStatusText();
-        }
+Panel.prototype.resume = function() {
+    send('resume', this.state.id);
+};
 
-        // draw pie progress indicator
-        if (idle || active) {
-            this.showIndicators(true);
-            var pie = Indicators.Pie;
-            canvas.clearRect(0, 0, pie.width, pie.height);
-            canvas.beginPath();
-            canvas.moveTo(pie.centerX, pie.centerY);
-            var percent = state.fsize ? Math.floor(sum(state.progress) * 100 / state.fsize) : 0;
-            canvas.arc(pie.centerX, pie.centerY, pie.radius, pie.base, pie.base + pie.base2 * percent, false);
-            canvas.lineTo(pie.centerX, pie.centerY);
-            canvas.fill();
-            canvas.closePath();
-            labels.percent.innerHTML = done ? '' : percent + '% of';
-            labels.rate.innerHTML = '-&nbsp;' + state.speed + 'b/s';
-            show(labels.percent, true);
-            show(labels.rate, active);
-            show(labels.size, true);
-        }
-        else if (inactive || done) {
-            this.showIndicators(false);
-            labels.percent.innerHTML = '';
-            labels.rate.innerHTML = '';
-            show(labels.percent, false);
-            show(labels.rate, false);
-            show(labels.size, false);
-        }
+Panel.prototype.remove = function() {
+    send('remove', this.state.id);
+    display.remove(this.state.id);
+};
 
-        // draw progress bars
-        if (!this.progress_bars) {
-            if (state.chunks && state.chunks.length > 0) {
-                labels.progress.innerHTML = '';
-                var progressbar_count = state.chunks.length;
-                var percent = Math.floor((1 / progressbar_count) * 100);
-                this.progress_bars = state.chunks.map(function(e) {
-                    var node = labels.progress.appendChild(createProgress(e, 0));
-                    node.style.width = percent + '%';
-                    return node;
-                }, this);
-                labels.progress.style.width = Indicators.Bar.width + 'px';
-            }
-        }
-        if (this.progress_bars) {
-            if (done || inactive) {
-                this.progress_bars.forEach(function(e, i) {
-                    e.parentNode.removeChild(e);
-                });
-                delete this.progress_bars;
-            }
-            else {
-                state.progress.forEach(function(e, i) {
-                    this.progress_bars[i].value = e;
-                }, this);
-            }
-        }
-
-        // show link controls
-        show(controls.pause, active);
-        show(controls.resume, idle);
-        show(controls.retry, inactive);
-        show(controls.cancel, active || idle);
-        show(controls.remove, inactive || done);
-    },
-
-    adjustDocPosition: function(status) {
-        switch (status) {
-        case DownloadStatus.QUEUED:
-            Display.queuedNode.insertAdjacentElement('afterEnd', this.rootNode);
-            break;
-        case DownloadStatus.CONNECTING:
-        case DownloadStatus.INITIALIZING:
-            Display.activeNode.insertAdjacentElement('afterEnd', this.rootNode);
-            break;
-        case DownloadStatus.COMPLETE:
-            Display.completedNode.insertAdjacentElement('afterEnd', this.rootNode);
-            break;
-        case DownloadStatus.CANCELLED:
-            Display.cancelledNode.insertAdjacentElement('afterEnd', this.rootNode);
-            break;
-        }
-    },
-
-    showIndicators: function(show) {
-        var str = show ? 'block' : 'none';
-        this.pies.foreground.style.display = str;
-        this.pies.background.style.display = str;
-        this.labels.progress.style.display = str;
-    },
-
-    cancel: function() {
-        send('cancel', this.state.id);
-        return false;
-    },
-
-    retry: function() {
-        send('retry', this.state.id);
-        //Display.remove(this.state.id);
-        return false;
-    },
-
-    pause: function() {
-        send('pause', this.state.id);
-        return false;
-    },
-
-    resume: function() {
-        send('resume', this.state.id);
-        return false;
-    },
-
-    remove: function() {
-        send('remove', this.state.id);
-        Display.remove(this.state.id);
-        return false;
-    },
-
-    getStatusText: function() {
-        switch (this.state.status) {
-        case DownloadStatus.QUEUED:
-            return 'Queued';
-        case DownloadStatus.INITIALIZING:
-            return 'Initializing';
-        case DownloadStatus.IN_PROGRESS:
-            return 'In progress';
-        case DownloadStatus.COMPLETE:
-            return 'Completed';
-        case DownloadStatus.CANCELLED:
-            return 'Cancelled';
-        case DownloadStatus.PAUSED:
-            return 'Paused';
-        case DownloadStatus.UNDEFINED:
-            return 'Undefined';
-        case DownloadStatus.CONNECTING:
-            return 'Connecting';
-        case DownloadStatus.ERROR:
-            return 'Error';
-        case DownloadStatus.CLOSING:
-            return 'Waiting for response';
-        }
-    },
-
-    clear: function() {
-        this.rootNode.innerHTML = '';
-    }
+Panel.prototype.clear = function() {
+    this.rootNode.innerHTML = '';
 };
 
 var port = null;
@@ -361,9 +332,9 @@ function send(cmd, var_args) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    Display.init();
+    display.init();
     port = chrome.extension.connect({'name':'downloads'});
-    port.onMessage.addListener(Display.showResults);
+    port.onMessage.addListener(display.showResults);
     document.getElementById('uri').onkeypress = function(e) {
         if (e.keyCode == 13) {
             var input = document.getElementById('uri');
@@ -377,7 +348,7 @@ document.addEventListener('DOMContentLoaded', function() {
         input.value = '';
     }
     document.getElementById('clear').onclick = function() {
-        Display.clear();
+        display.clear();
         send('clear');
     }
     send('search', 'all');
