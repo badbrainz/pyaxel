@@ -56,7 +56,6 @@ document.addEventListener('DOMContentLoaded', function() {
     var location = document.querySelector('#location');
     var maxdownloads = document.querySelector('#downloads');
     var bandwidth_inp = document.querySelector('#bandwidth');
-    var update_chk = document.querySelector('#update');
     var version = document.querySelector('#version');
     var tab0 = document.querySelector('#tab0');
     var tab1 = document.querySelector('#tab1');
@@ -79,8 +78,6 @@ document.addEventListener('DOMContentLoaded', function() {
         maxsplits.value = background.getPreference('prefs.splits');
         maxdownloads.value = background.getPreference('prefs.downloads');
         bandwidth_inp.value = background.getPreference('prefs.bandwidth');
-        update_chk.checked = background.getPreference('prefs.update', true);
-        console.log(background.getPreference('prefs.update'))
 
         save_btn.onclick = function() {
             var host = hostname.value.trim();
@@ -98,11 +95,6 @@ document.addEventListener('DOMContentLoaded', function() {
             background.setPreference('prefs.bandwidth', bandwidth);
 
             showTooltip(true, 'Preferences saved');
-        }
-
-        update_chk.onchange = function() {
-            var val = Number(this.checked);
-            background.setPreference('prefs.update', val);
         }
 
         document.querySelector('#echo').onclick = function(e) {
