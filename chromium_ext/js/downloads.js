@@ -198,7 +198,7 @@ Panel.prototype.update = function(state) {
     var active = status === DownloadStatus.IN_PROGRESS;
     var idle = status === DownloadStatus.PAUSED;
     var done = status === DownloadStatus.COMPLETE;
-    var inactive = status === DownloadStatus.QUEUED || status === DownloadStatus.CANCELLED;
+    var inactive = status === DownloadStatus.QUEUED || status === DownloadStatus.CANCELLED || status === DownloadStatus.ERROR;
 
     var prev_status = this.state.status;
     this.state = state;
