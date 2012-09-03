@@ -287,6 +287,7 @@ Panel.prototype.adjustDocPosition = function(status) {
         display.completedNode.insertAdjacentElement('afterEnd', this.rootNode);
         break;
     case DownloadStatus.CANCELLED:
+    case DownloadStatus.ERROR:
         display.cancelledNode.insertAdjacentElement('afterEnd', this.rootNode);
         break;
     }
