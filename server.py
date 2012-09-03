@@ -59,13 +59,13 @@ class chanstate_c:
         if inp in state:
             next, action = state[inp]
             if action is not None:
-                action(self.current_state, inp, args)
+                action(args)
             self.current_state = next
         else:
             if None in state:
                 next, action = state[None]
                 if action is not None:
-                    action(self.current_state, inp, args)
+                    action(args)
                 self.current_state = next
             else:
                 raise TransitionError(self.current_state, inp, 'input not recognized')
@@ -77,16 +77,16 @@ class channel_c:
         self.server = server
         self.websocket = websocket.AsyncChat(sock, self)
         self.state = chanstate_c()
-        self.state.add('initial', IDENT, 'listening', self.state_ident)
-        self.state.add('listening', START, 'established', self.state_start)
-        self.state.add('listening', ABORT, 'listening', self.state_abort)
-        self.state.add('listening', QUIT, 'listening', self.state_quit)
-        self.state.add('established', STOP, 'listening', self.state_stop)
-        self.state.add('established', ABORT, 'listening', self.state_abort)
-        self.state.add('established', QUIT, 'listening', self.state_quit)
+        self.state.add('initial', IDENT, 'listening', self.ident)
+        self.state.add('listening', START, 'established', self.start)
+        self.state.add('listening', ABORT, 'listening', self.abort)
+        self.state.add('listening', QUIT, 'listening', self.quit)
+        self.state.add('established', STOP, 'listening', self.stop)
+        self.state.add('established', ABORT, 'listening', self.abort)
+        self.state.add('established', QUIT, 'listening', self.quit)
         self.state.start('initial')
 
-    def state_ident(self, state, inp, args):
+    def ident(self, args):
         if args.get('type') == 'ECHO':
             self.websocket.handle_response(deflate_msg({'event':OK,'log':args.get('msg')}))
             self.close()
@@ -95,7 +95,7 @@ class channel_c:
                 'version': SRV_VERSION}))
 
     # start/resume
-    def state_start(self, state, inp, args):
+    def start(self, args):
         #TODO require list of url strings
 
         self.websocket.handle_response(deflate_msg({'event':INITIALIZING}))
@@ -143,21 +143,21 @@ class channel_c:
         self.websocket.handle_response(deflate_msg(msg))
 
     # pause
-    def state_stop(self, state, inp, args):
+    def stop(self, args):
         if self.axel:
             pyaxel2.pyaxel_stop(self.axel)
             self.websocket.handle_response(deflate_msg({'event':CLOSING,
                 'log':pyaxel2.pyaxel_print(self.axel)}))
 
     # quit
-    def state_abort(self, state, inp, args):
+    def abort(self, args):
         if self.axel:
             pyaxel2.pyaxel_abort(self.axel)
             self.websocket.handle_response(deflate_msg({'event':CLOSING,
                 'log':pyaxel2.pyaxel_print(self.axel)}))
 
     # disconnect
-    def state_quit(self, state, inp, args):
+    def quit(self, args):
         self.close()
 
     def chat_message(self, msg):
@@ -177,9 +177,6 @@ class channel_c:
             self.close()
 
     def chat_closed(self):
-        self.close()
-
-    def chat_error(self):
         self.close()
 
     def update(self):
@@ -214,11 +211,14 @@ class channel_c:
         pyaxel2.pyaxel_close(self.axel)
 
     def close(self, status=1000, reason=''):
-        if self.axel:
+        established = self.axel and self.axel.ready == 0
+
+        if established:
             pyaxel2.pyaxel_close(self.axel)
-            self.axel = None
 
         if self.websocket.handshaken:
+            if established and self.state.current_state == 'established':
+                self.websocket.handle_response(deflate_msg({"event":INCOMPLETE}))
             self.websocket.disconnect(status, reason)
 
         self.server.remove_channel(self)
@@ -260,7 +260,8 @@ class server_c(asyncore.dispatcher):
             c.close(status=1001, reason='server shutdown')
 
     def remove_channel(self, channel):
-        self.channels.remove(channel)
+        if channel in self.channels:
+            self.channels.remove(channel)
 
 
 def format_size(num, prefix=True):
