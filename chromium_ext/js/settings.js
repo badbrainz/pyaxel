@@ -2,41 +2,6 @@ var background = chrome.extension.getBackgroundPage();
 
 var timeout = null;
 
-var connhandler = {
-    onconnevent: function(sender, response) {
-        var event = response.event;
-        if (event === ConnectionEvent.CONNECTED) {
-            sender.send({
-                cmd: ServerCommand.IDENT,
-                arg: {
-                    type: 'MGR',
-                    pref: {
-                        dlpath: background.getPreference('prefs.path'),
-                        splits: background.getPreference('prefs.splits', true),
-                        speed: background.getPreference('prefs.bandwidth', true)
-                    }
-                }
-            });
-        }
-        else if (event === ConnectionEvent.DISCONNECTED) {
-            //...
-        }
-        else if (event === ConnectionEvent.ERROR) {
-            showTooltip(false, 'Not connected');
-        }
-    },
-
-    onmsgevent: function(sender, response) {
-        var event = response.event;
-        if (event === MessageEvent.ACK) {
-            showTooltip(true, 'Preferences saved');
-            sender.send({
-                cmd: ServerCommand.QUIT
-            });
-        }
-    }
-};
-
 function showTooltip(type, msg) {
     window.setTimeout(function() {
         var node = document.querySelector('#infoTip');
@@ -132,10 +97,7 @@ document.addEventListener('DOMContentLoaded', function() {
             background.setPreference('prefs.downloads', downloads);
             background.setPreference('prefs.bandwidth', bandwidth);
 
-            var connection = new Connection(formatString('ws://{0}:{1}', background.getPreference('prefs.host'), port));
-            connection.connevent.attach(connhandler.onconnevent);
-            connection.msgevent.attach(connhandler.onmsgevent);
-            connection.connect();
+            showTooltip(true, 'Preferences saved');
         }
 
         update_chk.onchange = function() {
