@@ -104,10 +104,8 @@ class channel_c:
         conf = args.get('conf')
 
         config = pyaxellib.conf_t()
-        pyaxellib.conf_init(config)
-        if not pyaxellib.conf_load(config, pyaxellib.PYAXEL_PATH + pyaxellib.PYAXEL_CONFIG):
+        if not pyaxellib.conf_init(config):
             raise Exception('couldn\'t load pyaxel config file')
-
         if conf:
             for prop in conf:
                 setattr(config, prop, conf[prop])
