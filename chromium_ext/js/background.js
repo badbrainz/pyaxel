@@ -87,7 +87,9 @@ function runCommand(var_args) {
     var args = arguments;
     switch (args[0]) {
     case 'add':
-        if (!downloadExists(args[1])) {
+        var expr = matchUrlExpression(args[0]);
+        if (!jobqueue.search('unassigned').some(expr) &&
+            !jobqueue.search('active').some(expr)) {
             var download = jobqueue.new(args[1]);
             download.status = DownloadStatus.QUEUED;
             download.date = today();
@@ -127,7 +129,10 @@ function runCommand(var_args) {
             });
         break;
     case 'retry':
-        jobqueue.retry(args[1]);
+        var download = jobqueue.search('all', args[1]);
+        var expr = matchUrlExpression(download.url);
+        if (!jobqueue.search('active').some(expr))
+            jobqueue.retry(args[1]);
         if (jobqueue.size())
             client.establish();
         break;
@@ -312,12 +317,10 @@ function getDownloadConfig() {
     };
 }
 
-function downloadExists(url) {
-    function duplicate(j) {
-        return url === j.url;
+function matchUrlExpression(url) {
+    return function(download) {
+        return download.url === url;
     }
-    return jobqueue.search('unassigned').some(duplicate) ||
-        jobqueue.search('active').some(duplicate);
 }
 
 
