@@ -1,0 +1,11 @@
+Tested on:
+  - Chromium 18.0.1025.151 (Developer Build 130497 Linux)
+  - Ubuntu 10.04, running on LinuxMint 9
+
+pyaxelWS protocol:
+  - ...
+
+Links:
+  - WebSocket interface <http://dev.w3.org/html5/websockets/#the-websocket-interface>
+  - pyaxel (original) <http://code.google.com/p/pyaxel/>
+  - pyaxelws <http://code.google.com/p/pyaxelws/>
