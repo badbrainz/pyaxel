@@ -48,81 +48,71 @@ class conf_t():
     pass
 
 
-def conf_init(conf):
-    conf.buffer_size = 5120
-    conf.reconnect_delay = 20
-    conf.max_speed = 0
-    conf.num_connections = 1
-    conf.connection_timeout = 45
-    conf.http_proxy = 0
-    conf.no_proxy = 0
-    conf.strip_cgi_parameters = 1
-    conf.save_state_interval = 10
-    conf.default_filename = 'default'
-    conf.verbose = 1
-    conf.http_debug = 0
-    conf.alternate_output = 0
-    conf.search_timeout = 10
-    conf.search_threads = 3
-    conf.search_amount = 15
-    conf.search_top = 3
-
-#    if not conf_load(conf, PYAXEL_PATH + PYAXEL_CONFIG):
-#        return 0
-
-    return 1
-
-
-class CfgParser(ConfigParser.RawConfigParser):
+class confparser_c(ConfigParser.RawConfigParser):
 
     fakesec = 'section'
 
     def read(self, filename):
         # WARN string-only arg
-        ret = []
         try:
             with open(filename, 'r') as fd:
-                text = StringIO.StringIO('[%s]\n' % CfgParser.fakesec + fd.read())
+                text = StringIO.StringIO('[%s]\n' % confparser_c.fakesec + fd.read())
                 self.readfp(text, filename)
-        except (IOError, EOFError):
-            pass
-        else:
-            ret.append(filename)
-        return ret
+        except (IOError, EOFError, ConfigParser.ParsingError):
+            return 0
+        return 1
 
     def getopt(self, opt, default=None):
-        try: return self.get(CfgParser.fakesec, opt)
-        finally: return default
+        try: return self.get(confparser_c.fakesec, opt)
+        except: return default
 
-    def setopt(self, opt, val):
-        self.set(CfgParser.fakesec, opt, val)
 
-    def save(self, filename):
-        with open(filename, 'w') as fd:
-            self.write(fd)
+def conf_init(conf):
+    conf.alternate_output = 0
+    conf.buffer_size = 5120
+    conf.connection_timeout = 45
+    conf.default_filename = 'default'
+    conf.http_debug = 0
+    conf.max_speed = 0
+    conf.num_connections = 1
+    conf.reconnect_delay = 20
+    conf.save_state_interval = 10
+    conf.verbose = 1
+#    conf.http_proxy = 0
+#    conf.no_proxy = 0
+#    conf.strip_cgi_parameters = 1
+#    conf.search_timeout = 10
+#    conf.search_threads = 3
+#    conf.search_amount = 15
+#    conf.search_top = 3
 
+    if not conf_load(conf, PYAXEL_PATH + PYAXEL_CONFIG):
+        return 0
+
+    return 1
 
 def conf_load(conf, path):
-    parser = CfgParser()
-    parser.read(path)
-    conf.verbose = int(parser.getopt('verbose', conf.verbose))
+    parser = confparser_c()
+    if not parser.read(path):
+        return 0
+
+    conf.alternate_output = int(parser.getopt('alternate_output', conf.alternate_output))
+    conf.buffer_size = int(parser.getopt('buffer_size', conf.buffer_size))
+    conf.connection_timeout = int(parser.getopt('connection_timeout', conf.connection_timeout))
+    conf.default_filename = str(parser.getopt('default_filename', conf.default_filename))
     conf.http_debug = int(parser.getopt('http_debug', conf.http_debug))
     conf.max_speed = int(parser.getopt('max_speed', conf.max_speed))
-    conf.buffer_size = int(parser.getopt('buffer_size', conf.buffer_size))
-    conf.reconnect_delay = int(parser.getopt('reconnect_delay', conf.reconnect_delay))
     conf.num_connections = int(parser.getopt('num_connections', conf.num_connections))
-    conf.connection_timeout = int(parser.getopt('connection_timeout', conf.connection_timeout))
+    conf.reconnect_delay = int(parser.getopt('reconnect_delay', conf.reconnect_delay))
     conf.save_state_interval = int(parser.getopt('save_state_interval', conf.save_state_interval))
-    conf.strip_cgi_parameters = int(parser.getopt('strip_cgi_parameters', conf.strip_cgi_parameters))
-#        conf.http_proxy = 0
-#        conf.no_proxy = 0
-#        conf.default_filename = 'default'
-#        conf.alternate_output = 0
-#        conf.search_timeout = 10
-#        conf.search_threads = 3
-#        conf.search_amount = 15
-#        conf.search_top = 3
-#        dbg_lvl = int(parser.getopt('http_debug', dbg_lvl))
+    conf.verbose = int(parser.getopt('verbose', conf.verbose))
+#    conf.strip_cgi_parameters = int(parser.getopt('strip_cgi_parameters', conf.strip_cgi_parameters))
+#    conf.http_proxy = int(parser.getopt('http_proxy', conf.http_proxy))
+#    conf.no_proxy = int(parser.getopt('no_proxy', conf.no_proxy))
+#    conf.search_timeout = int(parser.getopt('search_timeout', search_timeout))
+#    conf.search_threads = int(parser.getopt('search_threads', search_threads))
+#    conf.search_amount = int(parser.getopt('search_amount', search_amount))
+#    conf.search_top = int(parser.getopt('search_top', search_top))
 
     return 1
 
