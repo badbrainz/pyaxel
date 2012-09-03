@@ -21,6 +21,18 @@ function init() {
         window.localStorage['data.lastUpdate'] = Date.now();
     }
 
+    var request = new XMLHttpRequest();
+    request.open('GET', chrome.extension.getURL('manifest.json'), true);
+    request.onreadystatechange = function() {
+        if (request.readyState == XMLHttpRequest.DONE) {
+            if (request.status == 200) {
+                var manifest = JSON.parse(request.responseText);
+                window.localStorage['data.version'] = manifest.version;
+            }
+        }
+    }
+    request.send();
+
 //    history.init();
 
     DownloadBadge.backimg = new Image(19, 19);
