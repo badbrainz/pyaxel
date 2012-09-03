@@ -87,7 +87,7 @@ function runCommand(var_args) {
     var args = arguments;
     switch (args[0]) {
     case 'add':
-        var expr = matchUrlExpression(args[0]);
+        var expr = matchUrlExpression(args[1]);
         if (!jobqueue.search('unassigned').some(expr) &&
             !jobqueue.search('active').some(expr)) {
             var download = jobqueue.new(args[1]);
