@@ -87,6 +87,8 @@ function runCommand(var_args) {
     var args = arguments;
     switch (args[0]) {
     case 'add':
+        if (!args[1])
+            return;
         var expr = matchUrlExpression(args[1]);
         if (!jobqueue.search('unassigned').some(expr) &&
             !jobqueue.search('active').some(expr)) {
