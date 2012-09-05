@@ -67,36 +67,38 @@ function activate_tab(e) {
 
 function validate_input(e) {
     var v = e.target.value.trim();
-    if (!v) return ' ';
-
     if ('host' === e.target.id) {
-        if (!regex.valid_ip.test(v))
+        if (v && !regex.valid_ip.test(v))
             return 'Invalid address';
     }
 
-    if ('port' === e.target.id ||
+    else if ('path' === e.target.id) {
+        if (v && !regex.valid_path.test(v))
+            return 'Invalid path';
+    }
+
+    else if ('port' === e.target.id ||
         'speed' === e.target.id) {
-        if (isNaN(v) || v < 0)
+        if (!v || isNaN(v) || v < 0)
             return 'Invalid number';
     }
 
-    if ('splits' === e.target.id ||
+    else if ('splits' === e.target.id ||
         'downloads' === e.target.id) {
-        if (isNaN(v) || v < 0)
+        if (v && isNaN(v) || v < 0)
             return 'Invalid number';
         if (e.target.value < +e.target.min)
             return 'Min value is ' + e.target.min;
         if (e.target.value > +e.target.max)
             return 'Max value is ' + e.target.max;
     }
-
 }
 
 function check_character(e) {
     if (e.keyCode === 13)
         e.target.blur();
     else if (e.keyCode === 27) {
-        e.target.value = 1; // webkit bug
+        e.target.value = 1; // bug?
         e.target.value = settings.background.getPreference('prefs.' + e.target.id);
     }
 }
@@ -104,18 +106,19 @@ function check_character(e) {
 function save_input(e) {
     var input = e.target;
     var err = validate_input(e);
-    if (!err)
+    if (!err) {
         settings.background.setPreference('prefs.' + input.id, e.target.value);
-    else {
-        err.trim() && show_tooltip(0, err);
-        input.value = settings.background.getPreference('prefs.' + input.id);
+        return;
     }
+    err.trim() && show_tooltip(0, err);
+    input.value = settings.background.getPreference('prefs.' + input.id);
 }
 
 var events = {
     blur: {
         'host': save_input,
         'port': save_input,
+        'path': save_input,
         'speed': save_input,
         'splits': save_input,
         'downloads': save_input,
@@ -127,6 +130,7 @@ var events = {
     keyup: {
         'host': check_character,
         'port': check_character,
+        'path': check_character,
         'splits': check_character,
         'downloads': check_character,
         'speed': check_character,
@@ -144,7 +148,7 @@ var settings = {
     background: chrome.extension.getBackgroundPage(),
     echo:null,
     hostname:null,
-    location:null,
+    path:null,
     maxsplits:null,
     maxdownloads:null,
     portnum:null,
@@ -181,7 +185,7 @@ var settings = {
                 var d = document;
                 hostname = d.querySelector('#host');
                 portnum = d.querySelector('#port');
-                location = d.querySelector('#location');
+                path = d.querySelector('#path');
                 maxsplits = d.querySelector('#splits');
                 maxdownloads = d.querySelector('#downloads');
                 speed_inp = d.querySelector('#speed');
@@ -198,7 +202,7 @@ var settings = {
                 version.innerText = background.getPreference('data.version');
                 hostname.value = background.getPreference('prefs.host');
                 portnum.value = background.getPreference('prefs.port');
-                location.value = background.getPreference('prefs.path');
+                path.value = background.getPreference('prefs.path');
                 maxsplits.value = background.getPreference('prefs.splits');
                 maxdownloads.value = background.getPreference('prefs.downloads');
                 speed_inp.value = background.getPreference('prefs.speed');
