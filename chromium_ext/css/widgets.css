@@ -53,7 +53,7 @@ input[type="search"]
 
 input[type="number"]
 {
-	width:4em;
+	width:3em;
 	padding:3px
 }
 
@@ -71,10 +71,18 @@ input[type="text"]:required:valid
 input[type="url"]:invalid,
 input[type="text"]:invalid
 {
-	background: hsl(355, 100%, 98%) url(../images/incorrect.png) right center no-repeat;}
+	background: hsl(355, 100%, 98%) url(../images/incorrect.png) right center no-repeat;
+	}
 
 input[type="url"]::-webkit-input-placeholder,
 input[type="text"]::-webkit-input-placeholder
 {
 	color:darkGray
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button
+{
+    -webkit-appearance: none;
+    margin: 0;
 }

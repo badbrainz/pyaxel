@@ -15,23 +15,23 @@ jobqueue.new = function(url) {
     return new Job(url);
 };
 
-jobqueue.add = function(item, queue) {
+jobqueue.add = function(item) {
     var job = (item instanceof Job && item) || jobqueue.new(item);
     jobqueue.catalog.all[job.id] = job;
     jobqueue.catalog.unassigned[job.id] = job;
-    if (!queue)
-        jobqueue.jobs.put(job);
+    jobqueue.jobs.put(job);
 };
 
 jobqueue.cancel = function(id) {
-    delete jobqueue.catalog.unassigned[id];
-    delete jobqueue.catalog.active[id];
-
-    jobqueue.catalog.completed[id] = jobqueue.catalog.all[id];
+    if (id in jobqueue.catalog.all) {
+        delete jobqueue.catalog.unassigned[id];
+        delete jobqueue.catalog.active[id];
+        jobqueue.catalog.completed[id] = jobqueue.catalog.all[id];
+    }
 };
 
 jobqueue.retry = function(id) {
-    if (!(id in jobqueue.catalog.completed ||
+    if (!(id in jobqueue.catalog.all || id in jobqueue.catalog.completed ||
         id in jobqueue.catalog.unassigned))
         return;
 
@@ -45,10 +45,12 @@ jobqueue.retry = function(id) {
 };
 
 jobqueue.remove = function(id) {
-    delete jobqueue.catalog.all[id];
-    delete jobqueue.catalog.active[id];
-    delete jobqueue.catalog.completed[id];
-    delete jobqueue.catalog.unassigned[id];
+    if (id in jobqueue.catalog.all) {
+        delete jobqueue.catalog.all[id];
+        delete jobqueue.catalog.active[id];
+        delete jobqueue.catalog.completed[id];
+        delete jobqueue.catalog.unassigned[id];
+    }
 };
 
 jobqueue.clear = function() {
@@ -58,10 +60,16 @@ jobqueue.clear = function() {
     }
 };
 
-jobqueue.search = function(id) {
-    if (typeof id === 'string' && id in jobqueue.catalog)
-        return getValues(jobqueue.catalog[id]);
-    return jobqueue.catalog.all[id];
+jobqueue.search = function(key, id) {
+    if (typeof key === 'string') {
+        if (key in jobqueue.catalog) {
+            if (typeof id !== 'undefined')
+                return jobqueue.catalog[key][id];
+            return getValues(jobqueue.catalog[key]);
+        }
+        return [];
+    }
+    return jobqueue.catalog.all[key];
 };
 
 jobqueue.get = function() {
@@ -79,21 +87,28 @@ jobqueue.size = function() {
 };
 
 jobqueue.jobStarted = function(job) {
-    jobqueue.catalog.active[job.id] = job;
+    if (job.id in jobqueue.catalog.all)
+        jobqueue.catalog.active[job.id] = job;
 };
 
 jobqueue.jobStopped = function(job) {
-    delete jobqueue.catalog.unassigned[job.id];
-    delete jobqueue.catalog.active[job.id];
-    jobqueue.catalog.completed[job.id] = job;
+    if (job.id in jobqueue.catalog.all) {
+        delete jobqueue.catalog.unassigned[job.id];
+        delete jobqueue.catalog.active[job.id];
+        jobqueue.catalog.completed[job.id] = job;
+    }
 };
 
 jobqueue.jobCompleted = function(job) {
-    delete jobqueue.catalog.active[job.id];
-    jobqueue.catalog.completed[job.id] = job;
+    if (job.id in jobqueue.catalog.all) {
+        delete jobqueue.catalog.active[job.id];
+        jobqueue.catalog.completed[job.id] = job;
+    }
 };
 
 jobqueue.jobFailed = function(job) {
-    delete jobqueue.catalog.active[job.id];
-    jobqueue.catalog.completed[job.id] = job;
+    if (job.id in jobqueue.catalog.all) {
+        delete jobqueue.catalog.active[job.id];
+        jobqueue.catalog.completed[job.id] = job;
+    }
 };
