@@ -15,41 +15,41 @@ function check_server() {
             });
         }
         else if (event === ConnectionEvent.DISCONNECTED)
-            show_tooltip(1, 'Connection successful');
+            message(1, 'Connection successful');
         else if (event === ConnectionEvent.ERROR)
-            show_tooltip(0, 'Connection failed');
+            message(0, 'Connection failed');
         settings.echo.removeAttribute('disabled');
     });
     connection.connect();
     settings.echo.setAttribute('disabled', 'disabled');
 }
 
-function add_class(elm, name) {
-    elm.classList.add(name);
-}
-
-function remove_class(elm, name) {
-    elm.classList.remove(name);
-}
-
 function show_tooltip(type, msg) {
-    window.setTimeout(function() {
-        var node = document.querySelector('#infoTip');
-        node.innerText = msg;
-        add_class(node, 'slide');
-        switch (type) {
-        case 0:
-            add_class(node, 'failure');
-            remove_class(node, 'success');
-            break;
-        case 1:
-            add_class(node, 'success');
-            remove_class(node, 'failure');
-            break;
-        }
-        if (settings.noteid) window.clearTimeout(settings.noteid);
-        settings.noteid = window.setTimeout(remove_class, 5000, node, 'slide');
-    }, 400);
+    var node = document.querySelector('#infoTip');
+    node.innerText = msg;
+    node.classList.add('slide');
+    switch (type) {
+    case 0:
+        node.classList.add('failure');
+        node.classList.remove('success');
+        break;
+    case 1:
+        node.classList.add('success');
+        node.classList.remove('failure');
+        break;
+    }
+}
+
+function hide_tooltip() {
+    document.querySelector('#infoTip').classList.remove('slide');
+}
+
+function message(type, msg) {
+    show_tooltip(type, msg)
+
+    if (settings.noteid !== -1)
+        window.clearTimeout(settings.noteid);
+    settings.noteid = window.setTimeout(hide_tooltip, 5000);
 }
 
 function activate_tab(e) {
@@ -110,7 +110,7 @@ function save_input(e) {
         settings.background.setPreference('prefs.' + input.id, e.target.value);
         return;
     }
-    err.trim() && show_tooltip(0, err);
+    err.trim() && message(0, err);
     input.value = settings.background.getPreference('prefs.' + input.id);
 }
 
@@ -122,9 +122,6 @@ var events = {
         'speed': save_input,
         'splits': save_input,
         'downloads': save_input,
-    },
-
-    input: {
     },
 
     keyup: {
@@ -157,7 +154,7 @@ var settings = {
     tabbar:null,
     panels:null,
     tabs:null,
-    noteid: null,
+    noteid: -1,
 
     handleEvent: function(e) {
         if (e.type === 'click') {
@@ -211,7 +208,6 @@ var settings = {
             settings.tabs[0].classList.add('curr');
             settings.panels[0].classList.add('curr');
             settings.panels[0].addEventListener('blur', settings, true);
-            settings.panels[0].addEventListener('input', settings, true);
             settings.panels[0].addEventListener('click', settings, false);
             settings.panels[0].addEventListener('keyup', settings, true);
             settings.tabbar.addEventListener('click', settings, false);
