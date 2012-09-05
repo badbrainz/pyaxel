@@ -158,18 +158,18 @@ a
     color:blue
 }
 
-input#bandwidth,input#port
+input#bandwidth,input#port,input#rate
 {
 	width:80px
 }
 
-input#location:invalid,input#host:invalid,input#bandwidth:invalid,input#port:invalid
+input#location:invalid,input#host:invalid,input#bandwidth:invalid,input#port:invalid,input#rate:invalid
 {
 	background:#ffe8ea url(../images/incorrect.png) right center no-repeat
 }
 
 input#location,input#host,input#port,input#bandwidth
 {
-	padding:3px
-;margin: 2px 0;
+	padding:3px;
+	margin: 2px 0;
 }

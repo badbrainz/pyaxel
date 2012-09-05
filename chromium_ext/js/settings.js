@@ -1,144 +1,213 @@
-var background = chrome.extension.getBackgroundPage();
+function save_settings() {
+    var host = settings.hostname.value.trim();
+    var port = Number(settings.portnum.value.trim());
+    var path = settings.location.value.trim();
+    var speed = Number(settings.speed_inp.value.trim());
+    var splits = clamp(Number(settings.maxsplits.value.trim()),
+        Number(settings.maxsplits.min), Number(settings.maxsplits.max));
+    var downloads = clamp(Number(settings.maxdownloads.value.trim()),
+        Number(settings.maxdownloads.min), Number(settings.maxdownloads.max));
 
-var timeout = null;
+    if (path === '' || regex.valid_path.test(path)) settings.background.setPreference('prefs.path', path);
+    if (host !== '' && regex.valid_ip.test(host)) settings.background.setPreference('prefs.host', host);
+    settings.background.setPreference('prefs.port', port);
+    settings.background.setPreference('prefs.splits', splits);
+    settings.background.setPreference('prefs.downloads', downloads);
+    settings.background.setPreference('prefs.speed', speed);
+    show_tooltip(1, 'Preferences saved');
+}
 
-function showTooltip(type, msg) {
+function check_server() {
+    var host = settings.hostname.value.trim();
+    if (host === '' || !regex.valid_ip.test(host)) return;
+    var connection = new Connection(formatString('ws://{0}:{1}/testing', host,
+        Number(settings.portnum.value.trim())));
+    connection.connevent.attach(function(sender, response) {
+        var event = response.event;
+        if (event === ConnectionEvent.CONNECTED) {
+            sender.send({
+                cmd: ServerCommand.IDENT,
+                arg: {
+                    type: 'ECHO',
+                    msg: +new Date
+                }
+            });
+        }
+        else if (event === ConnectionEvent.DISCONNECTED)
+            show_tooltip(1, 'Connection successful');
+        else if (event === ConnectionEvent.ERROR)
+            show_tooltip(0, 'Connection failed');
+        settings.echo.removeAttribute('disabled');
+    });
+    connection.connect();
+    settings.echo.setAttribute('disabled', 'disabled');
+}
+
+function add_class(elm, name) {
+    elm.classList.add(name);
+}
+
+function remove_class(elm, name) {
+    elm.classList.remove(name);
+}
+
+function show_tooltip(type, msg) {
     window.setTimeout(function() {
         var node = document.querySelector('#infoTip');
         node.innerText = msg;
-        node.classList.add('slide');
-        if (type) {
-            node.classList.add('success');
-            node.classList.remove('failure');
+        add_class(node, 'slide');
+        switch (type) {
+        case 0:
+            add_class(node, 'failure');
+            remove_class(node, 'success');
+            break;
+        case 1:
+            add_class(node, 'success');
+            remove_class(node, 'failure');
+            break;
         }
-        else {
-            node.classList.add('failure');
-            node.classList.remove('success');
-        }
-        if (timeout) window.clearTimeout(timeout);
-        timeout = window.setTimeout(function() {
-            node.classList.remove('slide');
-        }, 5000);
+        if (settings.noteid) window.clearTimeout(settings.noteid);
+        settings.noteid = window.setTimeout(remove_class, 5000, node, 'slide');
     }, 400);
 }
 
-function check_number_input(input) {
-    var val = Number(input.value.trim());
-    if (val === 0) return;
-    var min = Number(input.min);
-    var max = Number(input.max);
-    if (isNaN(val)) { // chrome bug: input accepts 'e' for number-type inputs
-        showTooltip(false, 'Value must be a number');
-        input.value = background.getPreference(formatString('prefs.{0}', input.id));
+function activatetab(e) {
+    var tabs = settings.tabs;
+    for (var i=0; i < tabs.length; i++) {
+        if (e.target === tabs[i]) {
+            e.target.classList.add('curr');
+            settings.panels[i].classList.add('curr');
+            continue;
+        }
+        tabs[i].classList.remove('curr');
+        settings.panels[i].classList.remove('curr');
     }
-    else if (val < min) showTooltip(false, formatString('Min value is {0}', min));
-    else if (val > max) showTooltip(false, formatString('Max value is {0}', max));
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    function activatetab() {
-        tabs.forEach(function(e) {
-            e.classList.remove('curr');
-            e.panel.classList.remove('curr');
-        }, this);
-        this.classList.add('curr');
-        this.panel.classList.add('curr');
-    }
-
-    function clamp_val() {
-        this.value = clamp(Number(this.value.trim()), Number(this.min), Number(this.max));
-    }
-
-    var hostname = document.querySelector('#host');
-    var portnum = document.querySelector('#port');
-    var save_btn = document.querySelector('#save');
-    var maxsplits = document.querySelector('#splits');
-    var location = document.querySelector('#location');
-    var maxdownloads = document.querySelector('#downloads');
-    var bandwidth_inp = document.querySelector('#bandwidth');
-    var version = document.querySelector('#version');
-    var tab0 = document.querySelector('#tab0');
-    var tab1 = document.querySelector('#tab1');
-    var tab2 = document.querySelector('#tab2');
-    var tabs = [tab0, tab1, tab2];
-    tab0.panel = document.querySelector('#panel0');
-    tab1.panel = document.querySelector('#panel1');
-    tab2.panel = document.querySelector('#panel2');
-    tab0.classList.add('curr');
-    tab0.panel.classList.add('curr');
-    tab0.onclick = activatetab;
-    tab1.onclick = activatetab;
-    tab2.onclick = activatetab;
-
-    try {
-        version.innerText = background.getPreference('data.version');
-        hostname.value = background.getPreference('prefs.host');
-        portnum.value = background.getPreference('prefs.port');
-        location.value = background.getPreference('prefs.path');
-        maxsplits.value = background.getPreference('prefs.splits');
-        maxdownloads.value = background.getPreference('prefs.downloads');
-        bandwidth_inp.value = background.getPreference('prefs.bandwidth');
-
-        save_btn.onclick = function() {
-            var host = hostname.value.trim();
-            var port = Number(portnum.value.trim());
-            var path = location.value.trim();
-            var bandwidth = Number(bandwidth_inp.value.trim());
-            var splits = clamp(Number(maxsplits.value.trim()), Number(maxsplits.min), Number(maxsplits.max));
-            var downloads = clamp(Number(maxdownloads.value.trim()), Number(maxdownloads.min), Number(maxdownloads.max));
-
-            if (path === '' || regex.valid_path.test(path)) background.setPreference('prefs.path', path);
-            if (host !== '' && regex.valid_ip.test(host)) background.setPreference('prefs.host', host);
-            background.setPreference('prefs.port', port);
-            background.setPreference('prefs.splits', splits);
-            background.setPreference('prefs.downloads', downloads);
-            background.setPreference('prefs.bandwidth', bandwidth);
-
-            showTooltip(true, 'Preferences saved');
-        }
-
-        document.querySelector('#echo').onclick = function(e) {
-            var host = hostname.value.trim();
-            if (host === '' || !regex.valid_ip.test(host)) return;
-            var button = e.target;
-            var connection = new Connection(formatString('ws://{0}:{1}/testing', host, Number(portnum.value.trim())));
-            connection.connevent.attach(function(sender, response) {
-                var event = response.event;
-                if (event === ConnectionEvent.CONNECTED) {
-                    sender.send({
-                        cmd: ServerCommand.IDENT,
-                        arg: {
-                            type: 'ECHO',
-                            msg: +new Date
-                        }
-                    });
-                }
-                else if (event === ConnectionEvent.DISCONNECTED) {
-                    showTooltip(true, 'Connection successful');
-                }
-                else if (event === ConnectionEvent.ERROR) {
-                    showTooltip(false, 'Connection failed');
-                }
-                button.removeAttribute('disabled');
-            });
-            connection.connect();
-            button.setAttribute('disabled', 'disabled');
-        }
-
-        maxsplits.onblur = clamp_val;
-        maxdownloads.onblur = clamp_val;
-
-        bandwidth_inp.onblur = function() {
-            var val = Number(this.value.trim());
-            if (val === '' || isNaN(val) || val < 0) this.value = background.getPreference('prefs.bandwidth');
-            else this.value = val; // webkit makes it zero for us
-        }
-        portnum.onblur = function() {
-            var val = Number(this.value.trim());
-            if (val === '' || isNaN(val) || val <= 0) this.value = background.getPreference('prefs.port');
+function checkinput(e) {
+    var input = e.target;
+    if (['splits','downloads','speed','port'].indexOf(input.id) != -1) {
+        if (isNaN(input.value)) {
+            show_tooltip(0, 'Value must be a number');
+            return;
         }
     }
-    catch (e) {
-        console.error(e);
+    if (input.type === 'number') {
+        if (input.value && !isNaN(input.value)) {
+            var min = parseInt(input.min);
+            var max = parseInt(input.max);
+            if (input.val < min) show_tooltip(0, 'Min value is ' + min);
+            else if (input.val > max) show_tooltip(0, 'Max value is ' + max);
+        }
     }
-}, false);
+}
+
+function validate(e) {
+    var input = e.target;
+    if (['splits','downloads','speed','port'].indexOf(input.id) != -1) {
+        if (!input.value.trim() || isNaN(input.value)) {
+            input.value = settings.background.getPreference('prefs.' + input.id);
+            return;
+        }
+    }
+    if (input.type === 'number') {
+        input.value = clamp(parseInt(input.value), parseInt(input.min), parseInt(input.max));
+    }
+}
+
+var events = {
+    blur: {
+        'splits': validate,
+        'downloads': validate,
+        'port': validate,
+        'speed': validate
+    },
+
+    input: {
+        'speed': checkinput,
+        'splits': checkinput,
+        'downloads': checkinput,
+        'port': checkinput
+    },
+
+    click: {
+        'settingstab': activatetab,
+        'manualtab': activatetab,
+        'abouttab': activatetab,
+        'save': save_settings,
+        'echo': check_server
+    }
+};
+
+var settings = {
+    background: chrome.extension.getBackgroundPage(),
+    echo:null,
+    hostname:null,
+    location:null,
+    maxsplits:null,
+    maxdownloads:null,
+    portnum:null,
+    speed_inp:null,
+    save_btn:null,
+    version:null,
+    tabbar:null,
+    panels:null,
+    tabs:null,
+    noteid: null,
+
+    handleEvent: function(e) {
+        if (e.type === 'click') {
+            if (!e.target.hasAttribute('disabled') && e.target.id in events.click)
+                events.click[e.target.id].call(window, e);
+        }
+
+        else if (e.type === 'blur') {
+            if (!e.target.hasAttribute('disabled') && e.target.id in events.blur)
+                events.blur[e.target.id].call(window, e);
+        }
+
+        else if (e.type === 'input') {
+            if (!e.target.hasAttribute('disabled') && e.target.id in events.input)
+                events.input[e.target.id].call(window, e);
+        }
+
+        else if (e.type === 'DOMContentLoaded') {
+            with (settings) {
+                var d = document;
+                hostname = d.querySelector('#host');
+                portnum = d.querySelector('#port');
+                save_btn = d.querySelector('#save');
+                location = d.querySelector('#location');
+                maxsplits = d.querySelector('#splits');
+                maxdownloads = d.querySelector('#downloads');
+                speed_inp = d.querySelector('#speed');
+                tabbar = d.querySelector('#tabbar');
+                version = d.querySelector('#version');
+                echo = d.querySelector('#echo');
+                tabs = [d.querySelector('#settingstab'),
+                    d.querySelector('#manualtab'),
+                    d.querySelector('#abouttab')];
+                panels = [d.querySelector('#settingspanel'),
+                    d.querySelector('#manualpanel'),
+                    d.querySelector('#aboutpanel')];
+
+                version.innerText = background.getPreference('data.version');
+                hostname.value = background.getPreference('prefs.host');
+                portnum.value = background.getPreference('prefs.port');
+                location.value = background.getPreference('prefs.path');
+                maxsplits.value = background.getPreference('prefs.splits');
+                maxdownloads.value = background.getPreference('prefs.downloads');
+                speed_inp.value = background.getPreference('prefs.speed');
+            }
+
+            settings.tabs[0].classList.add('curr');
+            settings.panels[0].classList.add('curr');
+            settings.panels[0].addEventListener('blur', settings, true);
+            settings.panels[0].addEventListener('input', settings, true);
+            settings.panels[0].addEventListener('click', settings, false);
+            settings.tabbar.addEventListener('click', settings, false);
+        }
+    }
+};
+
+document.addEventListener('DOMContentLoaded', settings, false);
