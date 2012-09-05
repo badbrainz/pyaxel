@@ -5,7 +5,6 @@ var job_map = {/* [job.id] = connection.id */};
 var settings = new Settings(window.localStorage, {
     'data.paversion': '1.1.0',
     'data.version': 0,
-    'prefs.bandwidth': 0,
     'prefs.downloads': 2,
     'prefs.host': '127.0.0.1',
     'prefs.output': 1,
@@ -342,6 +341,17 @@ settings.connect('update', function(event) {
     var keys = event.key.split('.');
     if (keys[0] == 'prefs') {
         switch (keys[1]) {
+        case 'downloads':
+            client.maxEstablished = +event.newVal;
+            break;
+        case 'host':
+            client.serverAddress = formatString('ws://{0}:{1}',
+                event.newVal, settings.getObject('prefs.port'));
+            break;
+        case 'port':
+            client.serverAddress = formatString('ws://{0}:{1}',
+                settings.getItem('prefs.host'), +event.newVal);
+            break;
         }
     }
 });
