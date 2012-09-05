@@ -5,7 +5,6 @@ var job_map = {/* [job.id] = connection.id */};
 var settings = new Settings(window.localStorage, {
     'data.paversion': '1.1.0',
     'data.version': 0,
-    'prefs.bandwidth': 0,
     'prefs.downloads': 2,
     'prefs.host': '127.0.0.1',
     'prefs.output': 1,
@@ -20,6 +19,18 @@ function init() {
         window.localStorage['data.seenInstall'] = true;
         window.localStorage['data.lastUpdate'] = Date.now();
     }
+
+    var request = new XMLHttpRequest();
+    request.open('GET', chrome.extension.getURL('manifest.json'), true);
+    request.onreadystatechange = function() {
+        if (request.readyState == XMLHttpRequest.DONE) {
+            if (request.status == 200) {
+                var manifest = JSON.parse(request.responseText);
+                window.localStorage['data.version'] = manifest.version;
+            }
+        }
+    }
+    request.send();
 
 //    history.init();
 
@@ -87,13 +98,17 @@ function runCommand(var_args) {
     var args = arguments;
     switch (args[0]) {
     case 'add':
-        if (!downloadExists(args[1])) {
+        if (!args[1])
+            return;
+        var expr = matchUrlExpression(args[1]);
+        if (!jobqueue.search('unassigned').some(expr) &&
+            !jobqueue.search('active').some(expr)) {
             var download = jobqueue.new(args[1]);
             download.status = DownloadStatus.QUEUED;
             download.date = today();
-            jobqueue.add(download, args[2]);
+            jobqueue.add(download);
             notifyPorts([download]);
-            if (jobqueue.size())
+            if (!args[2])
                 client.establish();
         }
         break;
@@ -127,7 +142,10 @@ function runCommand(var_args) {
             });
         break;
     case 'retry':
-        jobqueue.retry(args[1]);
+        var download = jobqueue.search('all', args[1]);
+        var expr = matchUrlExpression(download.url);
+        if (!jobqueue.search('active').some(expr))
+            jobqueue.retry(args[1]);
         if (jobqueue.size())
             client.establish();
         break;
@@ -308,16 +326,15 @@ function getDownloadConfig() {
     return {
         'alternate_output': settings.getObject('prefs.output'),
         'max_speed': settings.getObject('prefs.speed'),
-        'num_connections': settings.getObject('prefs.splits')
+        'num_connections': settings.getObject('prefs.splits'),
+        'download_path': settings.getItem('prefs.path')
     };
 }
 
-function downloadExists(url) {
-    function duplicate(j) {
-        return url === j.url;
+function matchUrlExpression(url) {
+    return function(download) {
+        return download.url === url;
     }
-    return jobqueue.search('unassigned').some(duplicate) ||
-        jobqueue.search('active').some(duplicate);
 }
 
 
@@ -325,6 +342,17 @@ settings.connect('update', function(event) {
     var keys = event.key.split('.');
     if (keys[0] == 'prefs') {
         switch (keys[1]) {
+        case 'downloads':
+            client.maxEstablished = +event.newVal;
+            break;
+        case 'host':
+            client.serverAddress = formatString('ws://{0}:{1}',
+                event.newVal, settings.getObject('prefs.port'));
+            break;
+        case 'port':
+            client.serverAddress = formatString('ws://{0}:{1}',
+                settings.getItem('prefs.host'), +event.newVal);
+            break;
         }
     }
 });

@@ -18,6 +18,26 @@ except:
 qfile_map = {}
 
 
+class tokenbucket_c():
+    def __init__(self, tokens, fill_rate):
+        self.capacity = float(tokens)
+        self.credits = float(tokens)
+        self.fill_rate = float(fill_rate)
+        self.timestamp = time.time()
+
+    def consume(self, tokens):
+        if self.credits < self.capacity:
+            now = time.time()
+            delta = self.fill_rate * (now - self.timestamp)
+            self.credits = min(self.capacity, self.credits + delta)
+            self.timestamp = now
+        tokens = max(tokens, self.credits)
+        expected_time = (tokens - self.credits) / self.fill_rate
+        if expected_time <= 0:
+            self.credits -= tokens
+        return max(0, expected_time)
+
+
 def pyaxel_open(pyaxel):
     if pyaxel.outfd == -1:
         if not pyaxellib.pyaxel_open(pyaxel):
@@ -39,9 +59,16 @@ def pyaxel_start(pyaxel):
 
     pyaxellib.pyaxel_message(pyaxel, 'Starting download: %s' % pyaxel.file_name)
 
+    pyaxel.buckets = []
+    if pyaxel.conf.max_speed > 0:
+        speed = pyaxel.conf.max_speed / pyaxel.conf.num_connections
+        for i in xrange(pyaxel.conf.num_connections):
+            pyaxel.buckets.append(tokenbucket_c(speed, speed))
+
     pyaxel.threads = threadpool.ThreadPool(pyaxel.conf.num_connections)
     for conn in pyaxel.conn:
         if conn.current_byte <= conn.last_byte:
+            conn.delay = 0
             conn.state = 1
             conn.reconnect_count = 0
             pyaxel.threads.addJob(threadpool.JobRequest(setup_thread, [conn]))
@@ -110,6 +137,13 @@ def pyaxel_do(pyaxel):
     pyaxel.bytes_done = pyaxel.bytes_start + sum([conn.current_byte - conn.start_byte for conn in pyaxel.conn])
     pyaxel.bytes_per_second = (pyaxel.bytes_done - pyaxel.bytes_start) / (time.time() - pyaxel.start_time)
 #    pyaxel.finish_time = pyaxel.start_time + (pyaxel.size - pyaxel.bytes_start) / pyaxel.bytes_per_second
+
+    if pyaxel.active_threads and pyaxel.buckets:
+        for conn, bucket in zip(pyaxel.conn, pyaxel.buckets):
+            bucket.capacity = pyaxel.conf.max_speed / pyaxel.active_threads
+            bucket.fill_rate = pyaxel.conf.max_speed / pyaxel.active_threads
+            if conn.enabled:
+                conn.delay = bucket.consume((conn.current_byte - conn.start_byte) / (time.time() - pyaxel.start_time))
 
     if pyaxel.bytes_done == pyaxel.size:
         pyaxellib.pyaxel_message(pyaxel, 'Download complete: %s' % pyaxel.file_name)
@@ -187,6 +221,7 @@ def download_thread(pyaxel, conn):
         except IOError:
             return (-2, conn)
         conn.current_byte += size
+        time.sleep(conn.delay)
 
     return (0, conn)
 
