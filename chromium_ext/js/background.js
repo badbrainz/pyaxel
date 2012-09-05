@@ -5,7 +5,6 @@ var job_map = {/* [job.id] = connection.id */};
 var settings = new Settings(window.localStorage, {
     'data.paversion': '1.1.0',
     'data.version': 0,
-    'prefs.bandwidth': 0,
     'prefs.downloads': 2,
     'prefs.host': '127.0.0.1',
     'prefs.output': 1,
