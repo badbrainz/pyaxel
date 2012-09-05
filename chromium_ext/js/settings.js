@@ -1,22 +1,3 @@
-function save_settings() {
-    var host = settings.hostname.value.trim();
-    var port = Number(settings.portnum.value.trim());
-    var path = settings.location.value.trim();
-    var speed = Number(settings.speed_inp.value.trim());
-    var splits = clamp(Number(settings.maxsplits.value.trim()),
-        Number(settings.maxsplits.min), Number(settings.maxsplits.max));
-    var downloads = clamp(Number(settings.maxdownloads.value.trim()),
-        Number(settings.maxdownloads.min), Number(settings.maxdownloads.max));
-
-    if (path === '' || regex.valid_path.test(path)) settings.background.setPreference('prefs.path', path);
-    if (host !== '' && regex.valid_ip.test(host)) settings.background.setPreference('prefs.host', host);
-    settings.background.setPreference('prefs.port', port);
-    settings.background.setPreference('prefs.splits', splits);
-    settings.background.setPreference('prefs.downloads', downloads);
-    settings.background.setPreference('prefs.speed', speed);
-    show_tooltip(1, 'Preferences saved');
-}
-
 function check_server() {
     var host = settings.hostname.value.trim();
     if (host === '' || !regex.valid_ip.test(host)) return;
@@ -71,7 +52,7 @@ function show_tooltip(type, msg) {
     }, 400);
 }
 
-function activatetab(e) {
+function activate_tab(e) {
     var tabs = settings.tabs;
     for (var i=0; i < tabs.length; i++) {
         if (e.target === tabs[i]) {
@@ -84,57 +65,77 @@ function activatetab(e) {
     }
 }
 
-function checkinput(e) {
-    var input = e.target;
-    if (['splits','downloads','speed','port'].indexOf(input.id) != -1) {
-        if (isNaN(input.value)) {
-            show_tooltip(0, 'Value must be a number');
-            return;
-        }
+function validate_input(e) {
+    var v = e.target.value.trim();
+    if (!v) return ' ';
+
+    if ('host' === e.target.id) {
+        if (!regex.valid_ip.test(v))
+            return 'Invalid address';
     }
-    if (input.type === 'number') {
-        if (input.value && !isNaN(input.value)) {
-            var min = parseInt(input.min);
-            var max = parseInt(input.max);
-            if (input.val < min) show_tooltip(0, 'Min value is ' + min);
-            else if (input.val > max) show_tooltip(0, 'Max value is ' + max);
-        }
+
+    if ('port' === e.target.id ||
+        'speed' === e.target.id) {
+        if (isNaN(v) || v < 0)
+            return 'Invalid number';
+    }
+
+    if ('splits' === e.target.id ||
+        'downloads' === e.target.id) {
+        if (isNaN(v) || v < 0)
+            return 'Invalid number';
+        if (e.target.value < +e.target.min)
+            return 'Min value is ' + e.target.min;
+        if (e.target.value > +e.target.max)
+            return 'Max value is ' + e.target.max;
+    }
+
+}
+
+function check_character(e) {
+    if (e.keyCode === 13)
+        e.target.blur();
+    else if (e.keyCode === 27) {
+        e.target.value = 1; // webkit bug
+        e.target.value = settings.background.getPreference('prefs.' + e.target.id);
     }
 }
 
-function validate(e) {
+function save_input(e) {
     var input = e.target;
-    if (['splits','downloads','speed','port'].indexOf(input.id) != -1) {
-        if (!input.value.trim() || isNaN(input.value)) {
-            input.value = settings.background.getPreference('prefs.' + input.id);
-            return;
-        }
-    }
-    if (input.type === 'number') {
-        input.value = clamp(parseInt(input.value), parseInt(input.min), parseInt(input.max));
+    var err = validate_input(e);
+    if (!err)
+        settings.background.setPreference('prefs.' + input.id, e.target.value);
+    else {
+        err.trim() && show_tooltip(0, err);
+        input.value = settings.background.getPreference('prefs.' + input.id);
     }
 }
 
 var events = {
     blur: {
-        'splits': validate,
-        'downloads': validate,
-        'port': validate,
-        'speed': validate
+        'host': save_input,
+        'port': save_input,
+        'speed': save_input,
+        'splits': save_input,
+        'downloads': save_input,
     },
 
     input: {
-        'speed': checkinput,
-        'splits': checkinput,
-        'downloads': checkinput,
-        'port': checkinput
+    },
+
+    keyup: {
+        'host': check_character,
+        'port': check_character,
+        'splits': check_character,
+        'downloads': check_character,
+        'speed': check_character,
     },
 
     click: {
-        'settingstab': activatetab,
-        'manualtab': activatetab,
-        'abouttab': activatetab,
-        'save': save_settings,
+        'settingstab': activate_tab,
+        'manualtab': activate_tab,
+        'abouttab': activate_tab,
         'echo': check_server
     }
 };
@@ -148,7 +149,6 @@ var settings = {
     maxdownloads:null,
     portnum:null,
     speed_inp:null,
-    save_btn:null,
     version:null,
     tabbar:null,
     panels:null,
@@ -171,12 +171,16 @@ var settings = {
                 events.input[e.target.id].call(window, e);
         }
 
+        else if (e.type === 'keyup') {
+            if (!e.target.hasAttribute('disabled') && e.target.id in events.keyup)
+                events.keyup[e.target.id].call(window, e);
+        }
+
         else if (e.type === 'DOMContentLoaded') {
             with (settings) {
                 var d = document;
                 hostname = d.querySelector('#host');
                 portnum = d.querySelector('#port');
-                save_btn = d.querySelector('#save');
                 location = d.querySelector('#location');
                 maxsplits = d.querySelector('#splits');
                 maxdownloads = d.querySelector('#downloads');
@@ -205,6 +209,7 @@ var settings = {
             settings.panels[0].addEventListener('blur', settings, true);
             settings.panels[0].addEventListener('input', settings, true);
             settings.panels[0].addEventListener('click', settings, false);
+            settings.panels[0].addEventListener('keyup', settings, true);
             settings.tabbar.addEventListener('click', settings, false);
         }
     }
