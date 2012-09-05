@@ -326,7 +326,8 @@ function getDownloadConfig() {
     return {
         'alternate_output': settings.getObject('prefs.output'),
         'max_speed': settings.getObject('prefs.speed'),
-        'num_connections': settings.getObject('prefs.splits')
+        'num_connections': settings.getObject('prefs.splits'),
+        'download_path': settings.getItem('prefs.path')
     };
 }
 
