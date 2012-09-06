@@ -210,7 +210,7 @@ class channel_c:
                 'log':pyaxel2.pyaxel_print(self.axel)}))
 
         pyaxel2.pyaxel_close(self.axel)
-        
+
         self.state.start('listening')
 
     def close(self, status=1000, reason=''):
@@ -282,7 +282,7 @@ def deflate_msg(msg):
 def inflate_msg(msg):
     return json.loads(msg)
 
-def run(options={}):
+def run(opts={}):
     if sys.platform.startswith('win'):
         print 'aborting: unsupported platform:', sys.platform
         return 1
@@ -293,9 +293,12 @@ def run(options={}):
             (major, minor, micro)
         return 1
 
+    if opts.get('verbose'):
+        pyaxellib.dbg_lvl = 1
+
     server = server_c()
     try:
-        server.start_service(('127.0.0.1', 8002))
+        server.start_service((opts.get('host', '127.0.0.1'), opts.get('port', 8002)))
     except socket.error:
         pass
     except KeyboardInterrupt:
@@ -311,38 +314,19 @@ def run(options={}):
     return 0
 
 if __name__ == '__main__':
-#    usage='Usage: %prog [options]'
-#    description='Note: options will be overridden by those that exist in the' \
-#        ' %s file.' % pyaxel.PYAXELWS_SETTINGS
-#    parser = OptionParser(usage=usage, description=description)
-#    parser.add_option('-s', '--max-speed', dest='max_speed',
-#                      type='int', default=0,
-#                      help='Specifies maximum speed (Kbytes per second).'
-#                      ' Useful if you don't want the program to suck up'
-#                      ' all of your bandwidth',
-#                      metavar='SPEED')
-#    parser.add_option('-n', '--num-connections', dest='num_connections',
-#                      type='int', default=1,
-#                      help='You can specify the number of connections per'
-#                      ' download here. The default is %d.' % 1,
-#                      metavar='NUM')
-#    parser.add_option('-a', '--host', dest='host',
-#                      type='string', default=pyaxel.PYAXELWS_HOST,
-#                      help='You can specify the address of the network'
-#                      ' interface here. The default is %s' % pyaxel.PYAXELWS_HOST,
-#                      metavar='HOST')
-#    parser.add_option('-p', '--port', dest='port',
-#                      type='int', default=pyaxel.PYAXELWS_PORT,
-#                      help='You can specify the port to listen for'
-#                      ' connections here. The default is %d.' % pyaxel.PYAXELWS_PORT,
-#                      metavar='PORT')
-#    parser.add_option('-d', '--directory', dest='download_path',
-#                      type='string', default=pyaxel.PYAXELWS_DEST,
-#                      help='Use this option to change where the files are'
-#                      ' saved. By default, files are saved in the current'
-#                      ' working directory.',
-#                      metavar='DIR')
-#    parser.add_option('-v', '--verbose', dest='verbose', action='store_true')
-#    (options, args) = parser.parse_args()
-#    run(options.__dict__)
-    sys.exit(run())
+    import optparse
+    usage='Usage: %prog [options]'
+    description='Note: options will override %s file.' % pyaxellib.PYAXEL_CONFIG
+    parser = optparse.OptionParser(usage=usage, description=description, version=SRV_VERSION)
+    parser.add_option('-a', '--host', dest='host',
+                      type='string', default='127.0.0.1',
+                      help='change the address of the network interface',
+                      metavar='HOST')
+    parser.add_option('-p', '--port', dest='port',
+                      type='int', default=8002,
+                      help='change the port to listen on for connections',
+                      metavar='PORT')
+    parser.add_option('-v', '--verbose', dest='verbose', action='store_true',
+                      help='print HTTP headers to stdout',)
+    opts, args = parser.parse_args()
+    sys.exit(run(vars(opts)))
