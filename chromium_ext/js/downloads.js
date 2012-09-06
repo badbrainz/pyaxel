@@ -74,7 +74,7 @@ function getStatusText(status) {
 var indicators = {};
 
 indicators.Pie = {
-    width: 48,
+    width: 48,207
     height: 48,
     radius: 24,
     centerX: 24,
@@ -207,6 +207,7 @@ Panel.prototype.update = function(state) {
         this.adjustDocPosition(status);
         labels.size.innerHTML = formatBytes(state.fsize);
         labels.status.innerHTML = getStatusText(status);
+        labels.name.innerHTML = state.fname || '';
     }
 
     if (idle || active) {
