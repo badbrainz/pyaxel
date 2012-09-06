@@ -15,11 +15,12 @@ jobqueue.new = function(url) {
     return new Job(url);
 };
 
-jobqueue.add = function(item) {
+jobqueue.add = function(item, wait) {
     var job = (item instanceof Job && item) || jobqueue.new(item);
     jobqueue.catalog.all[job.id] = job;
     jobqueue.catalog.unassigned[job.id] = job;
-    jobqueue.jobs.put(job);
+    if (!wait)
+        jobqueue.jobs.put(job);
 };
 
 jobqueue.cancel = function(id) {
