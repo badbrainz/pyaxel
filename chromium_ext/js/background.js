@@ -106,7 +106,7 @@ function runCommand(var_args) {
             var download = jobqueue.new(args[1]);
             download.status = DownloadStatus.QUEUED;
             download.date = today();
-            jobqueue.add(download);
+            jobqueue.add(download, args[2]);
             notifyPorts([download]);
             if (!args[2])
                 client.establish();
@@ -144,8 +144,12 @@ function runCommand(var_args) {
     case 'retry':
         var download = jobqueue.search('all', args[1]);
         var expr = matchUrlExpression(download.url);
-        if (!jobqueue.search('active').some(expr))
+        if (!jobqueue.search('active').some(expr)) {
+            download.status = DownloadStatus.QUEUED;
+            download.date = today();
             jobqueue.retry(args[1]);
+            notifyPorts([download]);
+        }
         if (jobqueue.size())
             client.establish();
         break;
