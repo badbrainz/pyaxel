@@ -164,7 +164,7 @@ class channel_c:
     def chat_message(self, msg):
         try:
             msg = inflate_msg(msg)
-            self.state.execute(msg['cmd'], msg.get('arg'))
+            self.state.execute(msg['cmd'], msg.get('arg', {}))
         except StateMachineError, e:
             self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':e}))
         except TransitionError, e:
