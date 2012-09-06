@@ -117,6 +117,9 @@ class channel_c:
         if not bool(os.stat(os.getcwd()).st_mode & stat.S_IWUSR):
             raise Exception('can\'t access protected directory: %s' % os.getcwd())
 
+        if 'download_path' in conf:
+            self.axel.file_name = conf['download_path'] + self.axel.file_name
+
         if not pyaxel2.pyaxel_open(self.axel):
             raise Exception(self.axel.last_error)
 
