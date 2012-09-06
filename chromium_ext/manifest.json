@@ -34,7 +34,6 @@
       "https://*/*",
       "http://*/*",
       "ftp://*/*",
-      "alarms",
       "contextMenus",
       "notifications",
       "tabs"
