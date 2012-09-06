@@ -210,6 +210,8 @@ class channel_c:
                 'log':pyaxel2.pyaxel_print(self.axel)}))
 
         pyaxel2.pyaxel_close(self.axel)
+        
+        self.state.start('listening')
 
     def close(self, status=1000, reason=''):
         established = self.axel and self.axel.ready == 0
