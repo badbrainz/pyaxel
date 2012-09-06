@@ -120,18 +120,6 @@ infoTip.success
 	color:#8f5600
 }
 
-/*#connstatus*/
-/*{*/
-/*    color:#00B358;*/
-/*    padding-left:6px;*/
-/*    font-weight:bold*/
-/*}*/
-
-/*#connstatus.invalid*/
-/*{*/
-/*    color:#F00000*/
-/*}*/
-
 p
 {
     margin:0;
@@ -161,11 +149,6 @@ a
 input#bandwidth,input#port,input#speed
 {
 	width:80px
-}
-
-input#location:invalid,input#host:invalid,input#bandwidth:invalid,input#port:invalid,input#speed:invalid
-{
-	background:#ffe8ea url(../images/incorrect.png) right center no-repeat
 }
 
 input#location,input#host,input#port,input#bandwidth

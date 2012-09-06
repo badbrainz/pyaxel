@@ -2,15 +2,15 @@ function check_server() {
     var host = settings.hostname.value.trim();
     if (host === '' || !regex.valid_ip.test(host)) return;
     var connection = new Connection(formatString('ws://{0}:{1}/testing', host,
-        Number(settings.portnum.value.trim())));
+        settings.portnum.value.trim()));
     connection.connevent.attach(function(sender, response) {
         var event = response.event;
         if (event === ConnectionEvent.CONNECTED) {
             sender.send({
-                cmd: ServerCommand.IDENT,
-                arg: {
-                    type: 'ECHO',
-                    msg: +new Date
+                'cmd': ServerCommand.IDENT,
+                'arg': {
+                    'type': 'ECHO',
+                    'msg': +new Date
                 }
             });
         }
@@ -77,14 +77,12 @@ function validate_input(e) {
             return 'Invalid path';
     }
 
-    else if ('port' === e.target.id ||
-        'speed' === e.target.id) {
+    else if ('port' === e.target.id || 'speed' === e.target.id) {
         if (!v || isNaN(v) || v < 0)
             return 'Invalid number';
     }
 
-    else if ('splits' === e.target.id ||
-        'downloads' === e.target.id) {
+    else if ('splits' === e.target.id || 'downloads' === e.target.id) {
         if (v && isNaN(v) || v < 0)
             return 'Invalid number';
         if (e.target.value < +e.target.min)
