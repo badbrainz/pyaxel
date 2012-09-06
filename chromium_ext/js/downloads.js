@@ -197,8 +197,10 @@ Panel.prototype.update = function(state) {
 
     var active = status === DownloadStatus.IN_PROGRESS;
     var idle = status === DownloadStatus.PAUSED;
+    var ending = status === DownloadStatus.CLOSING;
     var done = status === DownloadStatus.COMPLETE;
-    var inactive = status === DownloadStatus.QUEUED || status === DownloadStatus.CANCELLED || status === DownloadStatus.ERROR;
+    var inactive = status === DownloadStatus.QUEUED ||
+        status === DownloadStatus.CANCELLED || status === DownloadStatus.ERROR;
 
     var prev_status = this.state.status;
     this.state = state;
@@ -207,6 +209,7 @@ Panel.prototype.update = function(state) {
         this.adjustDocPosition(status);
         labels.size.innerHTML = formatBytes(state.fsize);
         labels.status.innerHTML = getStatusText(status);
+        labels.name.innerHTML = state.fname || '';
     }
 
     if (idle || active) {
@@ -227,7 +230,7 @@ Panel.prototype.update = function(state) {
         show(labels.rate, active);
         show(labels.size, true);
     }
-    else if (inactive || done) {
+    else if (inactive || done || ending) {
         this.showindicators(false);
         labels.percent.innerHTML = '';
         labels.rate.innerHTML = '';
@@ -263,7 +266,6 @@ Panel.prototype.update = function(state) {
         }
     }
 
-    // show link controls
     var controls = this.controls;
     show(controls.pause, active);
     show(controls.resume, idle);
@@ -281,6 +283,7 @@ Panel.prototype.adjustDocPosition = function(status) {
     case DownloadStatus.INITIALIZING:
     case DownloadStatus.IN_PROGRESS:
     case DownloadStatus.PAUSED:
+    case DownloadStatus.CLOSING:
         display.activeNode.insertAdjacentElement('afterEnd', this.rootNode);
         break;
     case DownloadStatus.COMPLETE:
@@ -350,7 +353,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     document.getElementById('clear').onclick = function() {
         display.clear();
-        send('clear');
+        send('purge');
     }
     send('search', 'all');
 }, false);

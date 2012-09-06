@@ -50,7 +50,7 @@ function init() {
     client.events.connect('disconnected', disconnect_handler);
     client.maxEstablished = settings.getObject('prefs.downloads');
     client.serverAddress = formatString('ws://{0}:{1}',
-        settings.getItem('prefs.host'), settings.getObject('prefs.port'));
+        settings.getItem('prefs.host'), settings.getItem('prefs.port'));
 
     chrome.contextMenus.create({
         'documentUrlPatterns' : ['http://*/*', 'https://*/*', 'ftp://*/*'],
@@ -106,7 +106,7 @@ function runCommand(var_args) {
             var download = jobqueue.new(args[1]);
             download.status = DownloadStatus.QUEUED;
             download.date = today();
-            jobqueue.add(download);
+            jobqueue.add(download, args[2]);
             notifyPorts([download]);
             if (!args[2])
                 client.establish();
@@ -116,10 +116,6 @@ function runCommand(var_args) {
         client.send(job_map[args[1]], {
             'cmd': ServerCommand.ABORT
         });
-        break;
-    case 'clear':
-        jobqueue.clear();
-        notifyPorts(jobqueue.search('all'));
         break;
     case 'pause':
         client.send(job_map[args[1]], {
@@ -142,12 +138,20 @@ function runCommand(var_args) {
             });
         break;
     case 'retry':
-        var download = jobqueue.search('all', args[1]);
-        var expr = matchUrlExpression(download.url);
-        if (!jobqueue.search('active').some(expr))
-            jobqueue.retry(args[1]);
-        if (jobqueue.size())
-            client.establish();
+        var download = jobqueue.search('completed', args[1]) ||
+            jobqueue.search('unassigned', args[1]);
+        if (download) {
+            download.status = DownloadStatus.QUEUED;
+            download.date = today();
+            jobqueue.retry(download.id);
+            notifyPorts([download]);
+            if (jobqueue.size())
+                client.establish();
+        }
+        break;
+    case 'purge':
+        jobqueue.purge();
+        notifyPorts(jobqueue.search('all'));
         break;
     case 'search':
         return jobqueue.search(args[1]);
@@ -161,23 +165,14 @@ function runCommand(var_args) {
 function connect_handler(connection) {
     var job = jobqueue.get();
     if (!job) {
-        // user removed job before connection was established.
-        // NOTE ui shouldn't allow it anyway.
-        connection.send({
-            'cmd': ServerCommand.QUIT
-        });
+        connection.send({'cmd': ServerCommand.QUIT});
         return;
     }
 
     job_map[job.id] = connection.id;
 
     connection.payload = job;
-    connection.send({
-        'cmd': ServerCommand.IDENT,
-        'arg': {
-            'type': 'WKR'
-        }
-    });
+    connection.send({'cmd': ServerCommand.IDENT});
 }
 
 function message_handler(connection, response) {
@@ -301,15 +296,15 @@ function error_handler(connection) {
 function displayPage(file) {
     var url = chrome.extension.getURL(file);
     chrome.tabs.query({
-        windowId: chrome.windows.WINDOW_ID_CURRENT,
-        url: url
+        'windowId': chrome.windows.WINDOW_ID_CURRENT,
+        'url': url
     }, function(tabs) {
         if (tabs.length == 0) chrome.tabs.create({
-            active: true,
-            url: url
+            'active': true,
+            'url': url
         });
         else chrome.tabs.update(tabs[0].id, {
-            active: true
+            'active': true
         });
     });
 }

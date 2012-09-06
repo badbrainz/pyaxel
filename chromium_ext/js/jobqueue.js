@@ -15,11 +15,12 @@ jobqueue.new = function(url) {
     return new Job(url);
 };
 
-jobqueue.add = function(item) {
+jobqueue.add = function(item, wait) {
     var job = (item instanceof Job && item) || jobqueue.new(item);
     jobqueue.catalog.all[job.id] = job;
     jobqueue.catalog.unassigned[job.id] = job;
-    jobqueue.jobs.put(job);
+    if (!wait)
+        jobqueue.jobs.put(job);
 };
 
 jobqueue.cancel = function(id) {
@@ -53,7 +54,7 @@ jobqueue.remove = function(id) {
     }
 };
 
-jobqueue.clear = function() {
+jobqueue.purge = function() {
     for (var k in jobqueue.catalog.completed) {
         delete jobqueue.catalog.completed[k];
         delete jobqueue.catalog.all[k];
