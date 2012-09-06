@@ -54,7 +54,7 @@ jobqueue.remove = function(id) {
     }
 };
 
-jobqueue.clear = function() {
+jobqueue.purge = function() {
     for (var k in jobqueue.catalog.completed) {
         delete jobqueue.catalog.completed[k];
         delete jobqueue.catalog.all[k];
