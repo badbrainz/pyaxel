@@ -91,10 +91,6 @@ def pyaxel_abort(pyaxel):
 
     for conn in pyaxel.conn:
         conn.enabled = 0
-    if os.path.exists('%s.st' % pyaxel.file_name):
-        os.remove('%s.st' % pyaxel.file_name)
-    if os.path.exists(pyaxel.file_name):
-        os.remove(pyaxel.file_name)
     pyaxel.ready = 3
 
 def pyaxel_do(pyaxel):
