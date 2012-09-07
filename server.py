@@ -108,7 +108,7 @@ class channel_c:
             self.close()
         else:
             self.websocket.handle_response(deflate_msg({'event':ACK,
-                'version': SRV_VERSION}))
+                'version': SRV_SRC_VERSION}))
 
     # start/resume
     def start(self, args):
