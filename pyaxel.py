@@ -525,6 +525,7 @@ def conn_info(conn):
         return 0
     conn_disconnect(conn)
     if not conn_set(conn, http_header(conn.http, 'location')):
+        conn.message = 'Invalid URL.';
         return 0
     # relative URL?
     # missing netloc?
