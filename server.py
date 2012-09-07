@@ -173,7 +173,6 @@ class channel_c:
         except Exception, e:
             import debug
             debug.backtrace()
-            self.state.start('listening')
             self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':str(e)}))
             self.close()
 
