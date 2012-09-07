@@ -204,7 +204,7 @@ class channel_c:
         elif self.axel.ready == 2: # pause
             self.websocket.handle_response(deflate_msg({"event":STOPPED,
                 'log':pyaxel2.pyaxel_print(self.axel)}))
-        elif self.axel.ready == 3: # cancel
+        elif self.axel.ready == 3 or self.axel.ready == 0: # cancel/error
             self.websocket.handle_response(deflate_msg({'event':INCOMPLETE,
                 'log':pyaxel2.pyaxel_print(self.axel)}))
 

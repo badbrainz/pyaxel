@@ -74,6 +74,7 @@ def conf_init(conf):
     conf.default_filename = 'default'
     conf.http_debug = 0
     conf.max_speed = 0
+    conf.max_reconnect = 5
     conf.num_connections = 1
     conf.reconnect_delay = 20
     conf.save_state_interval = 10
@@ -102,6 +103,7 @@ def conf_load(conf, path):
     conf.default_filename = str(parser.getopt('default_filename', conf.default_filename))
     conf.http_debug = int(parser.getopt('http_debug', conf.http_debug))
     conf.max_speed = int(parser.getopt('max_speed', conf.max_speed))
+    conf.max_reconnect = int(parser.getopt('max_reconnect', conf.max_reconnect))
     conf.num_connections = int(parser.getopt('num_connections', conf.num_connections))
     conf.reconnect_delay = int(parser.getopt('reconnect_delay', conf.reconnect_delay))
     conf.save_state_interval = int(parser.getopt('save_state_interval', conf.save_state_interval))
