@@ -16,7 +16,7 @@ import threadpool
 import websocket
 
 
-SRV_VERSION = '1.0.0'
+SRV_SRC_VERSION = '1.1.0'
 
 # channel_c reply codes
 (INITIALIZING, ACK, OK, PROCESSING, END, CLOSING, INCOMPLETE, STOPPED, INVALID,
@@ -85,6 +85,22 @@ class channel_c:
         self.state.add('established', ABORT, 'listening', self.abort)
         self.state.add('established', QUIT, 'listening', self.quit)
         self.state.start('initial')
+
+    def chat_message(self, msg):
+        try:
+            msg = inflate_msg(msg)
+            self.state.execute(msg['cmd'], msg.get('arg', {}))
+        except StateMachineError, e:
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':e}))
+        except TransitionError, e:
+            resp = '\'%s\' %s <state:%s>' % (e.inp, e.msg, e.cur)
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':resp}))
+        except Exception, e:
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':str(e)}))
+            self.close()
+
+    def chat_closed(self):
+        self.close()
 
     def ident(self, args):
         if args.get('type') == 'ECHO':
@@ -161,24 +177,6 @@ class channel_c:
     def quit(self, args):
         self.close()
 
-    def chat_message(self, msg):
-        try:
-            msg = inflate_msg(msg)
-            self.state.execute(msg['cmd'], msg.get('arg', {}))
-        except StateMachineError, e:
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':e}))
-        except TransitionError, e:
-            resp = '\'%s\' %s <state:%s>' % (e.inp, e.msg, e.cur)
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':resp}))
-        except Exception, e:
-            import debug
-            debug.backtrace()
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':str(e)}))
-            self.close()
-
-    def chat_closed(self):
-        self.close()
-
     def update(self):
         if not self.axel or self.axel.ready == -1:
             return
@@ -252,7 +250,6 @@ class server_c(asyncore.dispatcher):
         while asyncore.socket_map:
             asyncore.loop(use_poll=True, timeout=1, count=1)
             for channel in self.channels:
-#                print 'start_service->looping channels'
                 channel.update()
 
     def stop_service(self):
@@ -271,7 +268,7 @@ def format_size(num, prefix=True):
         return '0'
     try:
         k = int(math.log(num, 1024))
-        return '%.2f%s' % (num / (1024.0 ** k), 'bKMGTPEY'[k] if prefix else '')
+        return '%.2f%s' % (num / (1024.0 ** k), 'bkMGTPEY'[k] if prefix else '')
     except TypeError:
         return '0'
 
@@ -316,7 +313,7 @@ if __name__ == '__main__':
     import optparse
     usage='Usage: %prog [options]'
     description='Note: options will override %s file.' % pyaxellib.PYAXEL_CONFIG
-    parser = optparse.OptionParser(usage=usage, description=description, version=SRV_VERSION)
+    parser = optparse.OptionParser(usage=usage, description=description, version=SRV_SRC_VERSION)
     parser.add_option('-a', '--host', dest='host',
                       type='string', default='127.0.0.1',
                       help='change the address of the network interface',

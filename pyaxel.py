@@ -20,7 +20,8 @@ except:
     import pickle
 
 from collections import deque
-#from ConfigParser import SafeConfigParser
+
+PYAXEL_SRC_VERSION = '1.0.0'
 
 PYAXEL_PATH = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
 PYAXEL_CONFIG = 'pyaxel.cfg'
@@ -70,22 +71,12 @@ class confparser_c(ConfigParser.RawConfigParser):
 def conf_init(conf):
     conf.alternate_output = 0
     conf.buffer_size = 5120
-    conf.connection_timeout = 45
     conf.default_filename = 'default'
-    conf.http_debug = 0
     conf.max_speed = 0
     conf.max_reconnect = 5
     conf.num_connections = 1
     conf.reconnect_delay = 20
     conf.save_state_interval = 10
-    conf.verbose = 1
-#    conf.http_proxy = 0
-#    conf.no_proxy = 0
-#    conf.strip_cgi_parameters = 1
-#    conf.search_timeout = 10
-#    conf.search_threads = 3
-#    conf.search_amount = 15
-#    conf.search_top = 3
 
     if not conf_load(conf, PYAXEL_PATH + PYAXEL_CONFIG):
         return 0
@@ -99,22 +90,12 @@ def conf_load(conf, path):
 
     conf.alternate_output = int(parser.getopt('alternate_output', conf.alternate_output))
     conf.buffer_size = int(parser.getopt('buffer_size', conf.buffer_size))
-    conf.connection_timeout = int(parser.getopt('connection_timeout', conf.connection_timeout))
     conf.default_filename = str(parser.getopt('default_filename', conf.default_filename))
-    conf.http_debug = int(parser.getopt('http_debug', conf.http_debug))
     conf.max_speed = int(parser.getopt('max_speed', conf.max_speed))
     conf.max_reconnect = int(parser.getopt('max_reconnect', conf.max_reconnect))
     conf.num_connections = int(parser.getopt('num_connections', conf.num_connections))
     conf.reconnect_delay = int(parser.getopt('reconnect_delay', conf.reconnect_delay))
     conf.save_state_interval = int(parser.getopt('save_state_interval', conf.save_state_interval))
-    conf.verbose = int(parser.getopt('verbose', conf.verbose))
-#    conf.strip_cgi_parameters = int(parser.getopt('strip_cgi_parameters', conf.strip_cgi_parameters))
-#    conf.http_proxy = int(parser.getopt('http_proxy', conf.http_proxy))
-#    conf.no_proxy = int(parser.getopt('no_proxy', conf.no_proxy))
-#    conf.search_timeout = int(parser.getopt('search_timeout', search_timeout))
-#    conf.search_threads = int(parser.getopt('search_threads', search_threads))
-#    conf.search_amount = int(parser.getopt('search_amount', search_amount))
-#    conf.search_top = int(parser.getopt('search_top', search_top))
 
     return 1
 
@@ -682,23 +663,23 @@ def main(argv=None):
         argv = sys.argv
 
     from optparse import OptionParser
-    parser = OptionParser(usage='Usage: %prog [options] url')
-    parser.add_option('-q', '--quiet', dest='verbose',
-                      default=False, action='store_true',
-                      help='leave stdout alone')
-    parser.add_option('-p', '--print', dest='http_debug',
-                      default=False, action='store_true',
-                      help='print HTTP info')
+    from optparse import IndentedHelpFormatter
+    fmt = IndentedHelpFormatter(indent_increment=4, max_help_position=40, width=77, short_first=1)
+    parser = OptionParser(usage='Usage: %prog [options] url', formatter=fmt, version=PYAXEL_SRC_VERSION)
     parser.add_option('-n', '--num-connections', dest='num_connections',
-                      type='int', default=1,
-                      help='specify maximum number of connections',
+                      type='int', default=4,
+                      help='maximum number of connections',
                       metavar='x')
     parser.add_option('-s', '--max-speed', dest='max_speed',
                       type='int', default=0,
-                      help='specify maximum speed (bytes per second)',
+                      help='maximum speed (bytes per second)',
+                      metavar='x')
+    parser.add_option('-o', '--output-path', dest='download_path',
+                      type='string', default=PYAXEL_DEST,
+                      help='local download directory',
                       metavar='x')
 
-    (options, args) = parser.parse_args()
+    options, args = parser.parse_args()
 
     if len(args) != 1:
         parser.print_help()
@@ -712,13 +693,10 @@ def main(argv=None):
             if not conf_load(conf, PYAXEL_PATH + PYAXEL_CONFIG):
                 return 1
 
-            for prop in options.__dict__:
-                    if not callable(options.__dict__[prop]):
-                        setattr(conf, prop, getattr(options, prop))
+            options = vars(options)
+            for prop in options:
+                setattr(conf, prop, options[prop])
 
-            conf.verbose = bool(conf.verbose)
-            conf.http_debug = bool(conf.http_debug)
-            conf.num_connections = options.num_connections
             axel = pyaxel_new(conf, 0, url)
             if axel.ready == -1:
                 pyaxel_print(axel)
@@ -726,15 +704,19 @@ def main(argv=None):
 
             pyaxel_print(axel)
 
+            if not conf.download_path.endswith(os.path.sep):
+                conf.download_path += os.path.sep
+            axel.file_name = conf.download_path + axel.file_name
+
             # TODO check permissions, destination opt, etc.
             if not bool(os.stat(os.getcwd()).st_mode & stat.S_IWUSR):
                 print 'Can\'t access protected directory: %s' % os.getcwd()
                 return 1
 #            if not os.access(axel.file_name, os.F_OK):
-#                print 'Couldn\'t access %s' % axel.file_name
+#                print 'Can\'t access %s' % axel.file_name
 #                return 0
 #            if not os.access('%s.st' % axel.file_name, os.F_OK):
-#                print 'Couldn\'t access %s.st' % axel.file_name
+#                print 'Can\'t access %s.st' % axel.file_name
 #                return 0
 
             if not pyaxel_open(axel):
@@ -773,8 +755,8 @@ def main(argv=None):
         except KeyboardInterrupt:
             print
             return 1
-        except:
-            print
+        except Exception, e:
+            print e
             print 'Unknown error!'
             return 1
 
