@@ -797,19 +797,5 @@ def print_alternate_output(pyaxel):
             sys.stdout.write(' [%dm %ds]' % (minutes, seconds))
     sys.stdout.flush()
 
-def get_time_left(time_in_secs):
-    ret_str = ""
-    mult_list = [60, 60 * 60, 60 * 60 * 24]
-    unit_list = ["second(s)", "minute(s)", "hour(s)", "day(s)"]
-    for i in range(len(mult_list)):
-        if time_in_secs < mult_list[i]:
-            pval = int(time_in_secs / (mult_list[i - 1] if i > 0 else 1))
-            ret_str = "%d %s" % (pval, unit_list[i])
-            break
-    if len(ret_str) == 0:
-        ret_str = "%d %s." % (int(time_in_secs / mult_list[2]), \
-                                  unit_list[3])
-    return ret_str
-
 if __name__ == '__main__':
     sys.exit(main())
