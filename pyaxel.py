@@ -709,15 +709,9 @@ def main(argv=None):
             axel.file_name = conf.download_path + axel.file_name
 
             # TODO check permissions, destination opt, etc.
-            if not bool(os.stat(os.getcwd()).st_mode & stat.S_IWUSR):
-                print 'Can\'t access protected directory: %s' % os.getcwd()
+            if not bool(os.stat(conf.download_path).st_mode & stat.S_IWUSR):
+                print 'Can\'t access protected directory: %s' % conf.download_path
                 return 1
-#            if not os.access(axel.file_name, os.F_OK):
-#                print 'Can\'t access %s' % axel.file_name
-#                return 0
-#            if not os.access('%s.st' % axel.file_name, os.F_OK):
-#                print 'Can\'t access %s.st' % axel.file_name
-#                return 0
 
             if not pyaxel_open(axel):
                 pyaxel_print(axel)
