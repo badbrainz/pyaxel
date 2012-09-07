@@ -108,14 +108,14 @@ def pyaxel_do(pyaxel):
             pyaxellib.conn_disconnect(conn)
             if conn.state == 0 and conn.current_byte < conn.last_byte:
                 pyaxellib.pyaxel_message(pyaxel, 'Restarting connection %d.' % pyaxel.conn.index(conn))
-                if conn.reconnect_count > 5:
+                if conn.reconnect_count >= pyaxel.conf.max_reconnect:
                     pyaxellib.pyaxel_message(pyaxel, 'Error on connection %d: Too many reconnect attempts.' % pyaxel.conn.index(conn))
                     pyaxel.active_threads -= 1
                     continue
                 conn.reconnect_count += 1
                 pyaxellib.conn_set(conn, pyaxel.url[0])
                 conn.state = 1
-                pyaxel.threads.addJob(threadpool.JobRequest(setup_thread, [conn]))
+                threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.threads.addJob, [threadpool.JobRequest(setup_thread, [conn])]).start()
                 conn.last_transfer = time.time()
             else:
                 pyaxellib.pyaxel_message(pyaxel, 'Error on connection %d.' % pyaxel.conn.index(conn))
