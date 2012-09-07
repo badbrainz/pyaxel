@@ -117,24 +117,25 @@ class channel_c:
         self.websocket.handle_response(deflate_msg({'event':INITIALIZING}))
 
         url = args.get('url')
-        conf = args.get('conf')
+        conf = args.get('conf', {})
 
         config = pyaxellib.conf_t()
         if not pyaxellib.conf_init(config):
             raise Exception('couldn\'t load pyaxel config file')
-        if conf:
-            for prop in conf:
-                setattr(config, prop, conf[prop])
+
+        for prop in conf:
+            setattr(config, prop, conf[prop])
+        if 'download_path' not in conf or not conf['download_path'].strip():
+            config.download_path = pyaxellib.PYAXEL_PATH
 
         self.axel = pyaxellib.pyaxel_new(config, 0, url)
         if self.axel.ready == -1:
             raise Exception(self.axel.last_error)
 
-        if not bool(os.stat(os.getcwd()).st_mode & stat.S_IWUSR):
-            raise Exception('can\'t access protected directory: %s' % os.getcwd())
+        if not bool(os.stat(config.download_path).st_mode & stat.S_IWUSR):
+            raise Exception('can\'t access protected directory: %s' % config.download_path)
 
-        if 'download_path' in conf:
-            self.axel.file_name = conf['download_path'] + self.axel.file_name
+        self.axel.file_name = config.download_path + self.axel.file_name
 
         if not pyaxel2.pyaxel_open(self.axel):
             raise Exception(self.axel.last_error)
