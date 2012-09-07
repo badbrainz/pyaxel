@@ -241,7 +241,8 @@ def pyaxel_open(pyaxel):
             if hasattr(os, 'O_BINARY'):
                 flags |= os.O_BINARY
             pyaxel.outfd = os.open(pyaxel.file_name, flags)
-            os.ftruncate(pyaxel.outfd, pyaxel.size)
+            if hasattr(os, 'ftruncate'):
+                os.ftruncate(pyaxel.outfd, pyaxel.size)
         except os.error:
             pyaxel_error(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
             return 0
