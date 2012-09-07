@@ -143,6 +143,7 @@ function runCommand(var_args) {
         if (download) {
             download.status = DownloadStatus.QUEUED;
             download.date = today();
+            delete download.log;
             jobqueue.retry(download.id);
             notifyPorts([download]);
             if (jobqueue.size())
