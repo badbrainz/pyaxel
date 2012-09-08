@@ -276,6 +276,8 @@ function disconnect_handler(connection) {
 
     if (connection.payload) {
         delete job_map[connection.payload.id];
+        if (connection.payload.status == DownloadStatus.PAUSED)
+            connection.payload.status = DownloadStatus.CANCELLED;
         notifyPorts([connection.payload]);
     }
     else
