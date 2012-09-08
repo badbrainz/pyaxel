@@ -15,6 +15,8 @@ try:
 except:
     import pickle
 
+PYAXEL_SRC_VERSION = '1.0.0'
+
 qfile_map = {}
 
 
@@ -91,10 +93,6 @@ def pyaxel_abort(pyaxel):
 
     for conn in pyaxel.conn:
         conn.enabled = 0
-    if os.path.exists('%s.st' % pyaxel.file_name):
-        os.remove('%s.st' % pyaxel.file_name)
-    if os.path.exists(pyaxel.file_name):
-        os.remove(pyaxel.file_name)
     pyaxel.ready = 3
 
 def pyaxel_do(pyaxel):
@@ -111,18 +109,18 @@ def pyaxel_do(pyaxel):
         elif state == -1:
             pyaxellib.conn_disconnect(conn)
             if conn.state == 0 and conn.current_byte < conn.last_byte:
-                pyaxellib.pyaxel_message(pyaxel, 'Restarting connection %d.' % pyaxel.conn.index(conn))
-                if conn.reconnect_count > 5:
+                if conn.reconnect_count >= pyaxel.conf.max_reconnect:
                     pyaxellib.pyaxel_message(pyaxel, 'Error on connection %d: Too many reconnect attempts.' % pyaxel.conn.index(conn))
                     pyaxel.active_threads -= 1
                     continue
-                conn.reconnect_count += 1
-                pyaxellib.conn_set(conn, pyaxel.url[0])
-                conn.state = 1
-                pyaxel.threads.addJob(threadpool.JobRequest(setup_thread, [conn]))
-                conn.last_transfer = time.time()
             else:
                 pyaxellib.pyaxel_message(pyaxel, 'Error on connection %d.' % pyaxel.conn.index(conn))
+            pyaxellib.pyaxel_message(pyaxel, 'Restarting connection %d.' % pyaxel.conn.index(conn))
+            pyaxellib.conn_set(conn, pyaxel.url[0])
+            conn.last_transfer = time.time()
+            conn.reconnect_count += 1
+            conn.state = 1
+            threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.threads.addJob, [threadpool.JobRequest(setup_thread, [conn])]).start()
         elif state == 0:
             if conn.current_byte < conn.last_byte:
                 pyaxellib.pyaxel_message(pyaxel, 'Connection %d unexpectedly closed.' % pyaxel.conn.index(conn))
@@ -247,20 +245,21 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv
 
-    parser = OptionParser(usage='Usage: %prog [options] url')
-    parser.add_option('-q', '--quiet', dest='verbose',
-                      default=False, action='store_true',
-                      help='leave stdout alone')
-    parser.add_option('-p', '--print', dest='http_debug',
-                      default=False, action='store_true',
-                      help='print HTTP info')
+    from optparse import OptionParser
+    from optparse import IndentedHelpFormatter
+    fmt = IndentedHelpFormatter(indent_increment=4, max_help_position=40, width=77, short_first=1)
+    parser = OptionParser(usage='Usage: %prog [options] url', formatter=fmt, version=PYAXEL_SRC_VERSION)
     parser.add_option('-n', '--num-connections', dest='num_connections',
                       type='int', default=1,
-                      help='specify maximum number of connections',
+                      help='maximum number of connections',
                       metavar='x')
     parser.add_option('-s', '--max-speed', dest='max_speed',
                       type='int', default=0,
-                      help='specify maximum speed (bytes per second)',
+                      help='maximum speed (bytes per second)',
+                      metavar='x')
+    parser.add_option('-o', '--output-path', dest='download_path',
+                      type='string', default=pyaxellib.PYAXEL_DEST,
+                      help='local download directory',
                       metavar='x')
 
     (options, args) = parser.parse_args(argv[1:])
@@ -277,13 +276,9 @@ def main(argv=None):
             if not pyaxellib.conf_load(conf, pyaxellib.PYAXEL_PATH + pyaxellib.PYAXEL_CONFIG):
                 return 1
 
-            for prop in options.__dict__:
-                if not callable(options.__dict__[prop]):
-                    setattr(conf, prop, getattr(options, prop))
-
-            conf.verbose = bool(conf.verbose)
-            conf.http_debug = bool(conf.http_debug)
-            conf.num_connections = options.num_connections
+            options = vars(options)
+            for prop in options:
+                setattr(conf, prop, options[prop])
 
             axel = pyaxellib.pyaxel_new(conf, 0, url)
             if axel.ready == -1:
@@ -292,16 +287,14 @@ def main(argv=None):
 
             pyaxellib.pyaxel_print(axel)
 
+            if not conf.download_path.endswith(os.path.sep):
+                conf.download_path += os.path.sep
+            axel.file_name = conf.download_path + axel.file_name
+
             # TODO check permissions, destination opt, etc.
-            if not bool(os.stat(os.getcwd()).st_mode & stat.S_IWUSR):
-                print 'Can\'t access protected directory: %s' % os.getcwd()
+            if not bool(os.stat(conf.download_path).st_mode & stat.S_IWUSR):
+                print 'Can\'t access protected directory: %s' % conf.download_path
                 return 1
-#                if not os.access(axel.file_name, os.F_OK):
-#                    print 'Couldn\'t access %s' % axel.file_name
-#                    return 0
-#                if not os.access('%s.st' % axel.file_name, os.F_OK):
-#                    print 'Couldn\'t access %s.st' % axel.file_name
-#                    return 0
 
             if not pyaxel_open(axel):
                 pyaxellib.pyaxel_print(axel)

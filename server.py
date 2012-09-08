@@ -16,7 +16,7 @@ import threadpool
 import websocket
 
 
-SRV_VERSION = '1.0.0'
+SRV_SRC_VERSION = '1.1.0'
 
 # channel_c reply codes
 (INITIALIZING, ACK, OK, PROCESSING, END, CLOSING, INCOMPLETE, STOPPED, INVALID,
@@ -86,13 +86,29 @@ class channel_c:
         self.state.add('established', QUIT, 'listening', self.quit)
         self.state.start('initial')
 
+    def chat_message(self, msg):
+        try:
+            msg = inflate_msg(msg)
+            self.state.execute(msg['cmd'], msg.get('arg', {}))
+        except StateMachineError, e:
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':e}))
+        except TransitionError, e:
+            resp = '\'%s\' %s <state:%s>' % (e.inp, e.msg, e.cur)
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':resp}))
+        except Exception, e:
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':str(e)}))
+            self.close()
+
+    def chat_closed(self):
+        self.close()
+
     def ident(self, args):
         if args.get('type') == 'ECHO':
             self.websocket.handle_response(deflate_msg({'event':OK,'log':args.get('msg')}))
             self.close()
         else:
             self.websocket.handle_response(deflate_msg({'event':ACK,
-                'version': SRV_VERSION}))
+                'version': SRV_SRC_VERSION}))
 
     # start/resume
     def start(self, args):
@@ -101,24 +117,25 @@ class channel_c:
         self.websocket.handle_response(deflate_msg({'event':INITIALIZING}))
 
         url = args.get('url')
-        conf = args.get('conf')
+        conf = args.get('conf', {})
 
         config = pyaxellib.conf_t()
         if not pyaxellib.conf_init(config):
             raise Exception('couldn\'t load pyaxel config file')
-        if conf:
-            for prop in conf:
-                setattr(config, prop, conf[prop])
+
+        for prop in conf:
+            setattr(config, prop, conf[prop])
+        if 'download_path' not in conf or not conf['download_path'].strip():
+            config.download_path = pyaxellib.PYAXEL_PATH
 
         self.axel = pyaxellib.pyaxel_new(config, 0, url)
         if self.axel.ready == -1:
             raise Exception(self.axel.last_error)
 
-        if not bool(os.stat(os.getcwd()).st_mode & stat.S_IWUSR):
-            raise Exception('can\'t access protected directory: %s' % os.getcwd())
+        if not bool(os.stat(config.download_path).st_mode & stat.S_IWUSR):
+            raise Exception('can\'t access protected directory: %s' % config.download_path)
 
-        if 'download_path' in conf:
-            self.axel.file_name = conf['download_path'] + self.axel.file_name
+        self.axel.file_name = config.download_path + self.axel.file_name
 
         if not pyaxel2.pyaxel_open(self.axel):
             raise Exception(self.axel.last_error)
@@ -161,43 +178,27 @@ class channel_c:
     def quit(self, args):
         self.close()
 
-    def chat_message(self, msg):
-        try:
-            msg = inflate_msg(msg)
-            self.state.execute(msg['cmd'], msg.get('arg', {}))
-        except StateMachineError, e:
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':e}))
-        except TransitionError, e:
-            resp = '\'%s\' %s <state:%s>' % (e.inp, e.msg, e.cur)
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':resp}))
-        except Exception, e:
-            import debug
-            debug.backtrace()
-            self.state.start('listening')
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':str(e)}))
-            self.close()
-
-    def chat_closed(self):
-        self.close()
-
     def update(self):
         if not self.axel or self.axel.ready == -1:
             return
 
+
         if self.axel.active_threads:
             pyaxel2.pyaxel_do(self.axel)
-            if self.axel.ready == 0:
-                msg = {
-                    'event': PROCESSING,
-                    'rate': format_size(self.axel.bytes_per_second),
-                    'log': pyaxel2.pyaxel_print(self.axel)
-                }
-                if self.axel.conf.alternate_output == 0:
-                    msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
-                elif self.axel.conf.alternate_output == 1:
-                    msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in self.axel.conn])]
-                self.websocket.handle_response(deflate_msg(msg))
-            return
+
+            if self.axel.ready != 1:
+                if self.axel.ready == 0:
+                    msg = {
+                        'event': PROCESSING,
+                        'rate': format_size(self.axel.bytes_per_second),
+                        'log': pyaxel2.pyaxel_print(self.axel)
+                    }
+                    if self.axel.conf.alternate_output == 0:
+                        msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
+                    elif self.axel.conf.alternate_output == 1:
+                        msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in self.axel.conn])]
+                    self.websocket.handle_response(deflate_msg(msg))
+                return
 
         if self.axel.ready == 1: # transfer successful
             self.websocket.handle_response(deflate_msg({'event':END,
@@ -205,7 +206,7 @@ class channel_c:
         elif self.axel.ready == 2: # pause
             self.websocket.handle_response(deflate_msg({"event":STOPPED,
                 'log':pyaxel2.pyaxel_print(self.axel)}))
-        elif self.axel.ready == 3: # cancel
+        elif self.axel.ready == 3 or self.axel.ready == 0: # cancel/error
             self.websocket.handle_response(deflate_msg({'event':INCOMPLETE,
                 'log':pyaxel2.pyaxel_print(self.axel)}))
 
@@ -253,7 +254,6 @@ class server_c(asyncore.dispatcher):
         while asyncore.socket_map:
             asyncore.loop(use_poll=True, timeout=1, count=1)
             for channel in self.channels:
-#                print 'start_service->looping channels'
                 channel.update()
 
     def stop_service(self):
@@ -272,7 +272,7 @@ def format_size(num, prefix=True):
         return '0'
     try:
         k = int(math.log(num, 1024))
-        return '%.2f%s' % (num / (1024.0 ** k), 'bKMGTPEY'[k] if prefix else '')
+        return '%.2f%s' % (num / (1024.0 ** k), 'bkMGTPEY'[k] if prefix else '')
     except TypeError:
         return '0'
 
@@ -317,7 +317,7 @@ if __name__ == '__main__':
     import optparse
     usage='Usage: %prog [options]'
     description='Note: options will override %s file.' % pyaxellib.PYAXEL_CONFIG
-    parser = optparse.OptionParser(usage=usage, description=description, version=SRV_VERSION)
+    parser = optparse.OptionParser(usage=usage, description=description, version=SRV_SRC_VERSION)
     parser.add_option('-a', '--host', dest='host',
                       type='string', default='127.0.0.1',
                       help='change the address of the network interface',
