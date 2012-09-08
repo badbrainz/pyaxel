@@ -182,20 +182,23 @@ class channel_c:
         if not self.axel or self.axel.ready == -1:
             return
 
+
         if self.axel.active_threads:
             pyaxel2.pyaxel_do(self.axel)
-            if self.axel.ready == 0:
-                msg = {
-                    'event': PROCESSING,
-                    'rate': format_size(self.axel.bytes_per_second),
-                    'log': pyaxel2.pyaxel_print(self.axel)
-                }
-                if self.axel.conf.alternate_output == 0:
-                    msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
-                elif self.axel.conf.alternate_output == 1:
-                    msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in self.axel.conn])]
-                self.websocket.handle_response(deflate_msg(msg))
-            return
+
+            if self.axel.ready != 1:
+                if self.axel.ready == 0:
+                    msg = {
+                        'event': PROCESSING,
+                        'rate': format_size(self.axel.bytes_per_second),
+                        'log': pyaxel2.pyaxel_print(self.axel)
+                    }
+                    if self.axel.conf.alternate_output == 0:
+                        msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
+                    elif self.axel.conf.alternate_output == 1:
+                        msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in self.axel.conn])]
+                    self.websocket.handle_response(deflate_msg(msg))
+                return
 
         if self.axel.ready == 1: # transfer successful
             self.websocket.handle_response(deflate_msg({'event':END,
