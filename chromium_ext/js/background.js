@@ -7,7 +7,7 @@ var settings = new Settings(window.localStorage, {
     'data.version': 0,
     'prefs.downloads': 2,
     'prefs.host': '127.0.0.1',
-    'prefs.output': 1,
+    'prefs.output': 0,
     'prefs.path': '',
     'prefs.port': 8002,
     'prefs.speed': 0,
@@ -144,6 +144,8 @@ function runCommand(var_args) {
             download.status = DownloadStatus.QUEUED;
             download.date = today();
             delete download.log;
+            delete download.chunks;
+            delete download.progress;
             jobqueue.retry(download.id);
             notifyPorts([download]);
             if (jobqueue.size())
@@ -274,6 +276,8 @@ function disconnect_handler(connection) {
 
     if (connection.payload) {
         delete job_map[connection.payload.id];
+        if (connection.payload.status == DownloadStatus.PAUSED)
+            connection.payload.status = DownloadStatus.CANCELLED;
         notifyPorts([connection.payload]);
     }
     else
