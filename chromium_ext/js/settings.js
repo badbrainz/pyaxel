@@ -66,29 +66,49 @@ function activate_tab(e) {
 }
 
 function validate_input(e) {
-    var v = e.target.value.trim();
-    if ('host' === e.target.id) {
-        if (v && !regex.valid_ip.test(v))
-            return 'Invalid address';
-    }
+    if (e.target.type === 'text' || e.target.type === 'number') {
+        var v = e.target.value.trim();
+        if ('host' === e.target.id) {
+            if (v && !regex.valid_ip.test(v))
+                return 'Invalid address';
+        }
 
-    else if ('path' === e.target.id) {
-        if (v && !regex.valid_path.test(v))
-            return 'Invalid path';
-    }
+        else if ('path' === e.target.id) {
+            if (v && !regex.valid_path.test(v))
+                return 'Invalid path';
+        }
 
-    else if ('port' === e.target.id || 'speed' === e.target.id) {
-        if (!v || isNaN(v) || v < 0)
-            return 'Invalid number';
-    }
+        else if ('port' === e.target.id || 'speed' === e.target.id) {
+            if (!v || isNaN(v) || v < 0)
+                return 'Invalid number';
+        }
 
-    else if ('splits' === e.target.id || 'downloads' === e.target.id) {
-        if (v && isNaN(v) || v < 0)
-            return 'Invalid number';
-        if (e.target.value < +e.target.min)
-            return 'Min value is ' + e.target.min;
-        if (e.target.value > +e.target.max)
-            return 'Max value is ' + e.target.max;
+        else if ('splits' === e.target.id || 'downloads' === e.target.id) {
+            if (v && isNaN(v) || v < 0)
+                return 'Invalid number';
+            if (e.target.value < +e.target.min)
+                return 'Min value is ' + e.target.min;
+            if (e.target.value > +e.target.max)
+                return 'Max value is ' + e.target.max;
+        }
+    }
+}
+
+function get_input_value(elm) {
+    if (elm.type === 'text' || elm.type === 'number') {
+        return elm.value.trim();
+    }
+    else if (elm.type === 'checkbox') {
+        return +elm.checked;
+    }
+}
+
+function set_input_value(elm, val) {
+    if (elm.type === 'text' || elm.type === 'number') {
+        elm.value = val;
+    }
+    else if (elm.type === 'checkbox') {
+        elm.checked = val;
     }
 }
 
@@ -105,11 +125,11 @@ function save_input(e) {
     var input = e.target;
     var err = validate_input(e);
     if (!err) {
-        settings.background.setPreference('prefs.' + input.id, e.target.value);
+        settings.background.setPreference('prefs.' + input.id, get_input_value(input));
         return;
     }
     err.trim() && message(0, err);
-    input.value = settings.background.getPreference('prefs.' + input.id);
+    set_input_value(input, settings.background.getPreference('prefs.' + input.id));
 }
 
 var events = {
@@ -133,8 +153,10 @@ var events = {
 
     click: {
         'settingstab': activate_tab,
+        'uitab': activate_tab,
         'manualtab': activate_tab,
         'abouttab': activate_tab,
+        'output': save_input,
         'echo': check_server
     }
 };
@@ -183,14 +205,17 @@ var settings = {
                 path = d.querySelector('#path');
                 maxsplits = d.querySelector('#splits');
                 maxdownloads = d.querySelector('#downloads');
+                output = d.querySelector('#output');
                 speed_inp = d.querySelector('#speed');
                 tabbar = d.querySelector('#tabbar');
                 version = d.querySelector('#version');
                 echo = d.querySelector('#echo');
                 tabs = [d.querySelector('#settingstab'),
+                    d.querySelector('#uitab'),
                     d.querySelector('#manualtab'),
                     d.querySelector('#abouttab')];
                 panels = [d.querySelector('#settingspanel'),
+                    d.querySelector('#uipanel'),
                     d.querySelector('#manualpanel'),
                     d.querySelector('#aboutpanel')];
 
@@ -200,6 +225,7 @@ var settings = {
                 path.value = background.getPreference('prefs.path');
                 maxsplits.value = background.getPreference('prefs.splits');
                 maxdownloads.value = background.getPreference('prefs.downloads');
+                output.checked = +background.getPreference('prefs.output');
                 speed_inp.value = background.getPreference('prefs.speed');
             }
 
@@ -207,6 +233,7 @@ var settings = {
             settings.panels[0].classList.add('curr');
             settings.panels[0].addEventListener('blur', settings, true);
             settings.panels[0].addEventListener('click', settings, false);
+            settings.panels[1].addEventListener('click', settings, false);
             settings.panels[0].addEventListener('keyup', settings, true);
             settings.tabbar.addEventListener('click', settings, false);
         }
