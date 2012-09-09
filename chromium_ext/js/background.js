@@ -7,7 +7,7 @@ var settings = new Settings(window.localStorage, {
     'data.version': 0,
     'prefs.downloads': 2,
     'prefs.host': '127.0.0.1',
-    'prefs.output': 0,
+    'prefs.output': 1,
     'prefs.path': '',
     'prefs.port': 8002,
     'prefs.speed': 0,
