@@ -149,11 +149,11 @@ class channel_c:
             'size': self.axel.size
         }
         if config.alternate_output == 0:
-            msg['chunks'] = [conn.last_byte - conn.first_byte for conn in self.axel.conn]
-            msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
-        elif config.alternate_output == 1:
             msg['chunks'] = [sum([conn.last_byte - conn.first_byte for conn in self.axel.conn])]
             msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in self.axel.conn])]
+        elif config.alternate_output == 1:
+            msg['chunks'] = [conn.last_byte - conn.first_byte for conn in self.axel.conn]
+            msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
 
         pyaxel2.pyaxel_start(self.axel)
 
@@ -194,9 +194,9 @@ class channel_c:
                         'log': pyaxel2.pyaxel_print(self.axel)
                     }
                     if self.axel.conf.alternate_output == 0:
-                        msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
-                    elif self.axel.conf.alternate_output == 1:
                         msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in self.axel.conn])]
+                    elif self.axel.conf.alternate_output == 1:
+                        msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
                     self.websocket.handle_response(deflate_msg(msg))
                 return
 
