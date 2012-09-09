@@ -332,7 +332,10 @@ Panel.prototype.clear = function() {
 var port = null;
 
 function send(cmd, var_args) {
-    port.postMessage(Array.prototype.slice.call(arguments, 0));
+    try {
+        port.postMessage(Array.prototype.slice.call(arguments, 0));
+    }
+    catch (err) {}
 }
 
 document.addEventListener('DOMContentLoaded', function() {
