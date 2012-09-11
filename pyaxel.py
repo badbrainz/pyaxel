@@ -136,7 +136,7 @@ def pyaxel_new(conf, count, url):
     if count == 0:
         pyaxel.url.append(url)
     else:
-        pyaxel.url.extend(url[:count])
+        pyaxel.url.extend([search.url for search in url[:count]])
 
     pyaxel.conn = [conn_t() for i in xrange(conf.num_connections)]
     pyaxel.conn[0].conf = conf
@@ -236,6 +236,7 @@ def pyaxel_start(pyaxel):
     # TODO assign mirrors
     for i, conn in enumerate(pyaxel.conn):
         conn_set(conn, pyaxel.url[0])
+        pyaxel.url.rotate(1)
         conn.conf = pyaxel.conf
         if i:
             conn.supported = 1
@@ -658,6 +659,10 @@ def setup_thread(conn):
     return 0
 
 
+class search_c:
+    url = ''
+
+
 def main(argv=None):
     if argv is None:
         argv = sys.argv
@@ -665,7 +670,7 @@ def main(argv=None):
     from optparse import OptionParser
     from optparse import IndentedHelpFormatter
     fmt = IndentedHelpFormatter(indent_increment=4, max_help_position=40, width=77, short_first=1)
-    parser = OptionParser(usage='Usage: %prog [options] url', formatter=fmt, version=PYAXEL_SRC_VERSION)
+    parser = OptionParser(usage='Usage: %prog [options] url[+]', formatter=fmt, version=PYAXEL_SRC_VERSION)
     parser.add_option('-n', '--num-connections', dest='num_connections',
                       type='int', default=4,
                       help='maximum number of connections',
@@ -681,12 +686,10 @@ def main(argv=None):
 
     options, args = parser.parse_args()
 
-    if len(args) != 1:
+    if len(args) == 0:
         parser.print_help()
     else:
         try:
-            # TODO search mirrors
-            url = args[0]
             conf = conf_t()
 
             conf_init(conf)
@@ -697,7 +700,16 @@ def main(argv=None):
             for prop in options:
                 setattr(conf, prop, options[prop])
 
-            axel = pyaxel_new(conf, 0, url)
+            if len(args) == 1:
+                axel = pyaxel_new(conf, 0, args[0])
+            else:
+                # TODO mirror file comparison
+                search = []
+                for arg in args:
+                    search.append(search_c())
+                    search[len(search) - 1].url = arg
+                axel = pyaxel_new(conf, len(search), search)
+
             if axel.ready == -1:
                 pyaxel_print(axel)
                 return 1
