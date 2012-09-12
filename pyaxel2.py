@@ -102,11 +102,14 @@ def pyaxel_do(pyaxel):
 
     for job in pyaxel.threads.iterProcessedJobs(0):
         state, conn = job.result()
-        if state == -2:
-            pyaxellib.pyaxel_message(pyaxel, 'Write error!')
+        if state == 0:
+            if conn.current_byte < conn.last_byte:
+                pyaxellib.pyaxel_message(pyaxel, 'Connection %d unexpectedly closed.' % pyaxel.conn.index(conn))
+            else:
+                pyaxellib.pyaxel_message(pyaxel, 'Connection %d finished.' % pyaxel.conn.index(conn))
             pyaxellib.conn_disconnect(conn)
             pyaxel.active_threads -= 1
-        elif state == -1:
+        elif state == 1:
             pyaxellib.conn_disconnect(conn)
             if conn.state == 0 and conn.current_byte < conn.last_byte:
                 if conn.reconnect_count >= pyaxel.conf.max_reconnect:
@@ -121,14 +124,11 @@ def pyaxel_do(pyaxel):
             conn.reconnect_count += 1
             conn.state = 1
             threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.threads.addJob, [threadpool.JobRequest(setup_thread, [conn])]).start()
-        elif state == 0:
-            if conn.current_byte < conn.last_byte:
-                pyaxellib.pyaxel_message(pyaxel, 'Connection %d unexpectedly closed.' % pyaxel.conn.index(conn))
-            else:
-                pyaxellib.pyaxel_message(pyaxel, 'Connection %d finished.' % pyaxel.conn.index(conn))
+        if state == 2:
+            pyaxellib.pyaxel_message(pyaxel, 'Write error!')
             pyaxellib.conn_disconnect(conn)
             pyaxel.active_threads -= 1
-        elif state == 1:
+        elif state == 3:
             pyaxellib.pyaxel_message(pyaxel, 'Connection %d opened.' % pyaxel.conn.index(conn))
             pyaxel.threads.addJob(threadpool.JobRequest(download_thread, [pyaxel, conn]))
 
@@ -207,17 +207,17 @@ def download_thread(pyaxel, conn):
         try:
             data = conn.http.fd.read(fetch_size)
         except socket.error:
-            return (-1, conn)
+            return (1, conn)
         size = len(data)
         if size == 0:
             return (0, conn)
         if size != fetch_size:
-            return (-1, conn)
+            return (1, conn)
         try:
             pyaxel_seek(pyaxel, conn.current_byte)
             pyaxel_write(pyaxel, data)
         except IOError:
-            return (-2, conn)
+            return (2, conn)
         conn.current_byte += size
         time.sleep(conn.delay)
 
@@ -230,11 +230,11 @@ def setup_thread(conn):
             conn.last_transfer = time.time()
             conn.state = 0
             conn.enabled = 1
-            return (1, conn)
+            return (3, conn)
 
     pyaxellib.conn_disconnect(conn)
     conn.state = 0
-    return (-1, conn)
+    return (1, conn)
 
 def main(argv=None):
     import stat
