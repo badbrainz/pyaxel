@@ -118,7 +118,7 @@ class pyaxel_t:
     save_state_interval = -1
     size = 0
     start_time = None
-    url = ''
+    url = None
 
 
 def pyaxel_new(conf, count, url):
