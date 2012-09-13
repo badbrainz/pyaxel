@@ -205,39 +205,11 @@ function message_handler(connection, response) {
         download.progress = response.progress;
         jobqueue.jobStarted(download);
         break;
-    case MessageEvent.BAD_REQUEST:
-    case MessageEvent.ERROR:
-        console.error('server response:', response.log);
-//            if (download) {
-            download.status = DownloadStatus.ERROR;
-            jobqueue.jobFailed(download);
-//            }
-        connection.send({'cmd': ServerCommand.ABORT});
-        break;
     case MessageEvent.PROCESSING:
         download.status = DownloadStatus.IN_PROGRESS;
         download.progress = response.progress;
         download.speed = response.rate;
         animation.start();
-        break;
-    case MessageEvent.INCOMPLETE:
-        download.status = DownloadStatus.CANCELLED;
-        jobqueue.jobStopped(download);
-        var job = jobqueue.get();
-        if (!job)
-            connection.send({'cmd': ServerCommand.QUIT});
-        else {
-            delete job_map[download.id];
-            job_map[job.id] = connection.id;
-            connection.payload = job;
-            connection.send({
-                'cmd': ServerCommand.START,
-                'arg': {
-                    'url': job.url,
-                    'conf': getDownloadConfig()
-                }
-            });
-        }
         break;
     case MessageEvent.STOPPED:
         download.status = DownloadStatus.PAUSED;
@@ -263,6 +235,32 @@ function message_handler(connection, response) {
                 }
             });
         }
+        break;
+    case MessageEvent.INCOMPLETE:
+        download.status = DownloadStatus.CANCELLED;
+        jobqueue.jobStopped(download);
+        var job = jobqueue.get();
+        if (!job)
+            connection.send({'cmd': ServerCommand.QUIT});
+        else {
+            delete job_map[download.id];
+            job_map[job.id] = connection.id;
+            connection.payload = job;
+            connection.send({
+                'cmd': ServerCommand.START,
+                'arg': {
+                    'url': job.url,
+                    'conf': getDownloadConfig()
+                }
+            });
+        }
+        break;
+    case MessageEvent.BAD_REQUEST:
+    case MessageEvent.ERROR:
+        download.status = DownloadStatus.ERROR;
+        jobqueue.jobFailed(download);
+        connection.send({'cmd': ServerCommand.ABORT});
+        console.error('server response:', response.log);
         break;
     }
 
