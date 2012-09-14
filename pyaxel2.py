@@ -44,8 +44,10 @@ def pyaxel_new(conf, url):
     pyaxel = pyaxellib.pyaxel_t()
     pyaxel.conf = conf
 
-    if 'download_path' not in conf or not conf['download_path'].strip():
+    if not hasattr(conf, 'download_path') or not conf.download_path:
         pyaxel.conf.download_path = pyaxellib.PYAXEL_PATH
+    if not pyaxel.conf.download_path.endswith(os.path.sep):
+        pyaxel.conf.download_path += os.path.sep
 
     pyaxel.url = Queue.deque()
     if type(url) is list:
@@ -347,9 +349,8 @@ def main(argv=None):
 
             options = vars(options)
             for prop in options:
-                setattr(conf, prop, options[prop])
-            if not conf.download_path.endswith(os.path.sep):
-                conf.download_path += os.path.sep
+                if options[prop] != None:
+                    setattr(conf, prop, options[prop])
 
             axel = pyaxel_new(conf, url)
 
