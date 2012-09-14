@@ -37,9 +37,11 @@ client.socketHandler = {
             break;
 
         case ConnectionEvent.ERROR:
-            delete client.activeCalls[connection.id];
-            client.activeCount--;
-            client.events.send('error', connection);
+            if (connection.id in client.activeCalls) {
+                delete client.activeCalls[connection.id];
+                client.activeCount--;
+                client.events.send('error', connection);
+            }
             break;
         }
     },
