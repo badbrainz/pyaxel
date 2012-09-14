@@ -136,6 +136,7 @@ def pyaxel_do(pyaxel):
 
         pyaxel.bytes_done = pyaxel.bytes_start + sum([conn.current_byte - conn.start_byte for conn in pyaxel.conn])
         pyaxel.bytes_per_second = (pyaxel.bytes_done - pyaxel.bytes_start) / (time.time() - pyaxel.start_time)
+        pyaxel.finish_time = pyaxel.start_time + (pyaxel.size - pyaxel.bytes_start) / (pyaxel.bytes_per_second + 1)
 
         if pyaxel.size and pyaxel.bytes_done == pyaxel.size:
             pyaxellib.pyaxel_message(pyaxel, 'Download complete: %s' % pyaxel.file_name)
