@@ -92,13 +92,11 @@ class channel_c:
         try:
             msg = inflate_msg(msg)
             self.state.execute(msg['cmd'], msg.get('arg', {}))
-        except StateMachineError, e:
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':e}))
         except TransitionError, e:
             resp = '\'%s\' %s <state:%s>' % (e.inp, e.msg, e.cur)
             self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':resp}))
-        except Exception, e:
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':str(e)}))
+        except (StateMachineError, Exception), e:
+            self.websocket.handle_response(deflate_msg({'event':ERROR}))
             self.close()
 
     def chat_closed(self):
