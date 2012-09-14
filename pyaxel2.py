@@ -56,6 +56,7 @@ def pyaxel_new(conf, url):
         pyaxel.url.append(url)
 
     pyaxel.conn = [pyaxellib.conn_t() for i in xrange(pyaxel.conf.num_connections)]
+    pyaxel.conn[0].conf = conf
     pyaxellib.conn_set(pyaxel.conn[0], pyaxel.url[0])
 
     pyaxel.active_threads = 1
@@ -242,6 +243,7 @@ def configuration_thread(pyaxel):
     for i, conn in enumerate(pyaxel.conn):
         pyaxellib.conn_set(conn, pyaxel.url[0])
         pyaxel.url.rotate(1)
+        conn.conf = pyaxel.conf
         if i: conn.supported = 1
 
     pyaxel.buckets = []
