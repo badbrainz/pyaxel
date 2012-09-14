@@ -112,20 +112,24 @@ function runCommand(var_args) {
                 client.establish();
         }
         break;
+
     case 'cancel':
         client.send(job_map[args[1]], {
             'cmd': ServerCommand.ABORT
         });
         break;
+
     case 'pause':
         client.send(job_map[args[1]], {
             'cmd': ServerCommand.STOP
         });
         break;
+
     case 'remove':
         jobqueue.remove(args[1]);
         notifyPorts(jobqueue.search('all'));
         break;
+
     case 'resume':
         var download = jobqueue.search(args[1]);
         if (download)
@@ -137,6 +141,7 @@ function runCommand(var_args) {
                 }
             });
         break;
+
     case 'retry':
         var download = jobqueue.search('completed', args[1]) ||
             jobqueue.search('unassigned', args[1]);
@@ -152,13 +157,16 @@ function runCommand(var_args) {
                 client.establish();
         }
         break;
+
     case 'purge':
         jobqueue.purge();
         notifyPorts(jobqueue.search('all'));
         break;
+
     case 'search':
         return jobqueue.search(args[1]);
         break;
+
     default:
         console.error('unknown command \'%s\'', args[0]);
         break;
@@ -186,6 +194,7 @@ function message_handler(connection, response) {
         download.status = DownloadStatus.CONNECTING;
         jobqueue.jobStarted(download);
         break;
+
     case MessageEvent.ACK:
         download.status = DownloadStatus.QUEUED;
         connection.send({
@@ -196,6 +205,7 @@ function message_handler(connection, response) {
             }
         });
         break;
+
     case MessageEvent.OK:
         download.status = DownloadStatus.INITIALIZING;
         download.fname = response.name;
@@ -205,18 +215,22 @@ function message_handler(connection, response) {
         download.progress = response.progress;
         jobqueue.jobStarted(download);
         break;
+
     case MessageEvent.PROCESSING:
         download.status = DownloadStatus.IN_PROGRESS;
         download.progress = response.progress;
         download.speed = response.rate;
         animation.start();
         break;
+
     case MessageEvent.STOPPED:
         download.status = DownloadStatus.PAUSED;
         break;
+
     case MessageEvent.CLOSING:
         download.status = DownloadStatus.CLOSING;
         break;
+
     case MessageEvent.END:
         download.status = DownloadStatus.COMPLETE;
         jobqueue.jobCompleted(download);
@@ -236,6 +250,7 @@ function message_handler(connection, response) {
             });
         }
         break;
+
     case MessageEvent.INCOMPLETE:
         download.status = DownloadStatus.CANCELLED;
         jobqueue.jobStopped(download);
@@ -255,6 +270,7 @@ function message_handler(connection, response) {
             });
         }
         break;
+
     case MessageEvent.BAD_REQUEST:
         console.error('server response:', response.log);
     case MessageEvent.ERROR:
@@ -345,10 +361,12 @@ settings.connect('update', function(event) {
         case 'downloads':
             client.maxEstablished = +event.newVal;
             break;
+
         case 'host':
             client.serverAddress = formatString('ws://{0}:{1}',
                 event.newVal, settings.getObject('prefs.port'));
             break;
+
         case 'port':
             client.serverAddress = formatString('ws://{0}:{1}',
                 settings.getItem('prefs.host'), +event.newVal);
