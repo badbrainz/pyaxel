@@ -32,22 +32,24 @@ PROTO_HTTP = 2
 PROTO_DEFAULT = PROTO_HTTP
 SCHEME_DEFAULT = 'http'
 
-INT_MAX = sys.maxsize
+DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) '\
+    'Gecko/20100115 Firefox/3.6'
 
-STD_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) '\
-        'Gecko/20100115 Firefox/3.6',
-    'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-    'Accept-Language': 'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
-    'Accept-Encoding': 'gzip,deflate,sdch'
-}
+INT_MAX = sys.maxsize
 
 dbg_lvl = 0
 
 
 class conf_t():
-    pass
-
+    alternate_output = 0
+    buffer_size = 5120
+    default_filename = 'default'
+    max_speed = 0
+    max_reconnect = 5
+    num_connections = 1
+    reconnect_delay = 20
+    save_state_interval = 10
+    user_agent = DEFAULT_USER_AGENT
 
 class confparser_c(ConfigParser.RawConfigParser):
 
@@ -69,15 +71,6 @@ class confparser_c(ConfigParser.RawConfigParser):
 
 
 def conf_init(conf):
-    conf.alternate_output = 0
-    conf.buffer_size = 5120
-    conf.default_filename = 'default'
-    conf.max_speed = 0
-    conf.max_reconnect = 5
-    conf.num_connections = 1
-    conf.reconnect_delay = 20
-    conf.save_state_interval = 10
-
     if not conf_load(conf, PYAXEL_PATH + PYAXEL_CONFIG):
         return 0
 
@@ -96,6 +89,7 @@ def conf_load(conf, path):
     conf.num_connections = int(parser.getopt('num_connections', conf.num_connections))
     conf.reconnect_delay = int(parser.getopt('reconnect_delay', conf.reconnect_delay))
     conf.save_state_interval = int(parser.getopt('save_state_interval', conf.save_state_interval))
+    conf.user_agent = str(parser.getopt('user_agent', conf.user_agent))
 
     return 1
 
@@ -548,7 +542,8 @@ def conn_setup(conn):
 #    conn.http.first_byte = conn.current_byte
 #    conn.http.last_byte = conn.last_byte
     http_setup(conn.http, s)
-    http_addheader(conn.http, 'User-Agent', STD_HEADERS['User-Agent'])
+    http_addheader(conn.http, 'User-Agent', conn.conf.user_agent)
+    http_addheader(conn.http, 'Accept-Encoding', 'gzip,deflate,sdch')
     if conn.last_byte:
         http_addheader(conn.http, 'Range', 'bytes=%d-%d' % (conn.current_byte, conn.last_byte))
     else:
@@ -683,6 +678,9 @@ def main(argv=None):
                       type='string', default=PYAXEL_DEST,
                       help='local download directory',
                       metavar='x')
+    parser.add_option('-u', '--user-agent', dest='user_agent',
+                      type='string', metavar='x',
+                      help='user agent header')
 
     options, args = parser.parse_args()
 
@@ -698,7 +696,8 @@ def main(argv=None):
 
             options = vars(options)
             for prop in options:
-                setattr(conf, prop, options[prop])
+                if options[prop] != None:
+                    setattr(conf, prop, options[prop])
 
             if len(args) == 1:
                 axel = pyaxel_new(conf, 0, args[0])
