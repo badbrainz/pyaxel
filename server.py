@@ -121,7 +121,7 @@ class channel_c:
         if not pyaxellib.conf_init(conf):
             raise Exception('Couldn\'t load pyaxel config file')
 
-        self.axel = pyaxellib2.pyaxel_new(config, args.get('url'))
+        self.axel = pyaxellib2.pyaxel_new(conf, args.get('url'))
 
     def stop(self, args):
         if self.axel:
