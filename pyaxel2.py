@@ -323,17 +323,17 @@ def main(argv=None):
     fmt = IndentedHelpFormatter(indent_increment=4, max_help_position=40, width=77, short_first=1)
     parser = OptionParser(usage='Usage: %prog [options] url', formatter=fmt, version=PYAXEL_SRC_VERSION)
     parser.add_option('-n', '--num-connections', dest='num_connections',
-                      type='int', default=1,
-                      help='maximum number of connections',
-                      metavar='x')
+                      type='int', metavar='x',
+                      help='maximum number of connections')
     parser.add_option('-s', '--max-speed', dest='max_speed',
-                      type='int', default=0,
-                      help='maximum speed (bytes per second)',
-                      metavar='x')
+                      type='int', metavar='x',
+                      help='maximum speed (bytes per second)')
     parser.add_option('-o', '--output-path', dest='download_path',
-                      type='string', default=pyaxellib.PYAXEL_DEST,
-                      help='local download directory',
-                      metavar='x')
+                      type='string', metavar='x',
+                      help='local download directory')
+    parser.add_option('-u', '--user-agent', dest='user_agent',
+                      type='string', metavar='x',
+                      help='user agent header')
 
     (options, args) = parser.parse_args(argv[1:])
 
