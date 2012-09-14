@@ -112,11 +112,11 @@ class channel_c:
 
     def start(self, args):
         conf = pyaxellib.conf_t()
+        pyaxellib.conf_init(conf)
+
         prefs = args.get('conf', {})
         for p in prefs:
             setattr(conf, p, prefs[p])
-
-        pyaxellib.conf_init(conf)
 
         self.axel = pyaxellib2.pyaxel_new(conf, args.get('url'))
 
