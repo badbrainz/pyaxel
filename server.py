@@ -94,7 +94,8 @@ class channel_c:
             self.state.execute(msg['cmd'], msg.get('arg', {}))
         except TransitionError, e:
             resp = '\'%s\' %s <state:%s>' % (e.inp, e.msg, e.cur)
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,'log':resp}))
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,
+                'log':resp}))
         except (StateMachineError, Exception), e:
             self.websocket.handle_response(deflate_msg({'event':ERROR}))
             self.close()
@@ -104,7 +105,8 @@ class channel_c:
 
     def ident(self, args):
         if args.get('type') == 'ECHO':
-            self.websocket.handle_response(deflate_msg({'event':OK,'log':args.get('msg')}))
+            self.websocket.handle_response(deflate_msg({'event':OK,
+                'log':args.get('msg')}))
             self.close()
         else:
             self.websocket.handle_response(deflate_msg({'event':ACK,

@@ -89,10 +89,10 @@ def pyaxel_do(pyaxel):
             pyaxellib.pyaxel_message(pyaxel, 'Starting download.')
         elif state == -3: # initialization_thread
             pyaxel.active_threads -= 1
-            pyaxellib.pyaxel_message(pyaxel, 'Can\'t access protected directory: %s' % pyaxel.conf.download_path)
+            pyaxellib.pyaxel_message(pyaxel, 'Cannot access protected directory: %s' % pyaxel.conf.download_path)
         elif state in (-2, -1): # configuration_thread
             pyaxel.active_threads -= 1
-            pyaxellib.pyaxel_message(pyaxel, 'Couldn\'t setup pyaxel')
+            pyaxellib.pyaxel_message(pyaxel, 'Could not setup pyaxel')
         elif state == 1:
             pyaxellib.conn_disconnect(item)
             if item.state == 0 and item.current_byte < item.last_byte:
@@ -338,12 +338,11 @@ def main(argv=None):
 
     (options, args) = parser.parse_args(argv[1:])
 
-    if len(args) != 1:
+    if len(args) == 0:
         parser.print_help()
     else:
         # TODO search mirrors
         try:
-            url = args[0]
             conf = pyaxellib.conf_t()
 
             pyaxellib.conf_init(conf)
@@ -355,7 +354,13 @@ def main(argv=None):
                 if options[prop] != None:
                     setattr(conf, prop, options[prop])
 
-            axel = pyaxel_new(conf, url)
+            # TODO mirror file comparison
+            search = []
+            for arg in args:
+                search.append(pyaxellib.search_c())
+                search[len(search) - 1].url = arg
+
+            axel = pyaxel_new(conf, search)
 
             while axel.active_threads:
                 pyaxel_do(axel)
