@@ -74,6 +74,8 @@ def conf_init(conf):
     if not conf_load(conf, PYAXEL_PATH + PYAXEL_CONFIG):
         return 0
 
+    # TODO proxy?
+
     return 1
 
 def conf_load(conf, path):
@@ -108,8 +110,8 @@ class pyaxel_t:
     message = []
     next_state = 0
     outfd = -1
-    ready = 0
-    save_state_interval = -1
+    ready = None
+    save_state_interval = 0
     size = 0
     start_time = None
     url = None
@@ -667,17 +669,14 @@ def main(argv=None):
     fmt = IndentedHelpFormatter(indent_increment=4, max_help_position=40, width=77, short_first=1)
     parser = OptionParser(usage='Usage: %prog [options] url[+]', formatter=fmt, version=PYAXEL_SRC_VERSION)
     parser.add_option('-n', '--num-connections', dest='num_connections',
-                      type='int', default=4,
-                      help='maximum number of connections',
-                      metavar='x')
+                      type='int', metavar='x',
+                      help='maximum number of connections')
     parser.add_option('-s', '--max-speed', dest='max_speed',
-                      type='int', default=0,
-                      help='maximum speed (bytes per second)',
-                      metavar='x')
+                      type='int', metavar='x',
+                      help='maximum speed (bytes per second)')
     parser.add_option('-o', '--output-path', dest='download_path',
-                      type='string', default=PYAXEL_DEST,
-                      help='local download directory',
-                      metavar='x')
+                      type='string', metavar='x',
+                      help='local download directory')
     parser.add_option('-u', '--user-agent', dest='user_agent',
                       type='string', metavar='x',
                       help='user agent header')
@@ -715,6 +714,8 @@ def main(argv=None):
 
             pyaxel_print(axel)
 
+            if not hasattr(conf, 'download_path') or not conf.download_path:
+                conf.download_path = PYAXEL_PATH
             if not conf.download_path.endswith(os.path.sep):
                 conf.download_path += os.path.sep
             axel.file_name = conf.download_path + axel.file_name
@@ -739,7 +740,9 @@ def main(argv=None):
                     if not axel.message and prev != axel.bytes_done:
                         print_alternate_output(axel)
                 else:
-                    pass
+                    # TODO use wget-style
+                    if not axel.message and prev != axel.bytes_done:
+                        print_alternate_output(axel)
 
                 if axel.message:
                     if conf.alternate_output:
@@ -749,7 +752,9 @@ def main(argv=None):
                     pyaxel_print(axel)
                     if not axel.ready:
                         if conf.alternate_output != 1:
-                            pass
+                            # TODO use wget-style
+                            if not axel.message and prev != axel.bytes_done:
+                                print_alternate_output(axel)
                         else:
                             print_alternate_output(axel)
                 elif axel.ready:
@@ -767,10 +772,11 @@ def main(argv=None):
 
         return 0
 
+# TODO should include little cute dots
 def print_alternate_output(pyaxel):
     if pyaxel.bytes_done < pyaxel.size:
         sys.stdout.write('\r\x1b[K')
-        sys.stdout.write('[%d%%]' % (pyaxel.bytes_done * 100 / pyaxel.size))
+        sys.stdout.write('Progress: %d%%' % (pyaxel.bytes_done * 100 / pyaxel.size))
         seconds = int(pyaxel.finish_time - time.time())
         minutes = int(seconds / 60)
         seconds -= minutes * 60
