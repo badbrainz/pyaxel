@@ -111,15 +111,16 @@ class channel_c:
                 'version': SRV_SRC_VERSION}))
 
     def start(self, args):
-        self.websocket.handle_response(deflate_msg({'event':INITIALIZING}))
 
         conf = pyaxellib.conf_t()
         prefs = args.get('conf', {})
         for p in prefs:
             setattr(conf, p, prefs[p])
 
+        msg = {'event':INITIALIZING}
         if not pyaxellib.conf_init(conf):
-            raise Exception('Couldn\'t load pyaxel config file')
+            msg['log'] = 'Couldn\'t load pyaxel config file'
+        self.websocket.handle_response(deflate_msg(msg))
 
         self.axel = pyaxellib2.pyaxel_new(conf, args.get('url'))
 
