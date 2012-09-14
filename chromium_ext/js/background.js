@@ -256,11 +256,11 @@ function message_handler(connection, response) {
         }
         break;
     case MessageEvent.BAD_REQUEST:
+        console.error('server response:', response.log);
     case MessageEvent.ERROR:
         download.status = DownloadStatus.ERROR;
         jobqueue.jobFailed(download);
         connection.send({'cmd': ServerCommand.ABORT});
-        console.error('server response:', response.log);
         break;
     }
 
