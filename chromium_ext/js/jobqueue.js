@@ -1,6 +1,7 @@
-var Job = function(url) {
+var Job = function(conf) {
     this.id = id();
-    this.url = url;
+    if (conf)
+        copy(this, conf);
 };
 
 var jobqueue = {};
@@ -11,8 +12,8 @@ jobqueue.catalog.completed = {};
 jobqueue.catalog.unassigned = {};
 jobqueue.jobs = new Queue();
 
-jobqueue.new = function(url) {
-    return new Job(url);
+jobqueue.new = function(conf) {
+    return new Job(conf);
 };
 
 jobqueue.add = function(item, wait) {
