@@ -1,0 +1,32 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>PyAxelWS Downloads</title>
+        <link type="text/css" rel="stylesheet" href="css/widgets.css" />
+        <link type="text/css" rel="stylesheet" href="css/downloads.css" />
+        <script src="js/utils.js"></script>
+        <script src="js/downloads.js"></script>
+    </head>
+    <body>
+        <div id="header">
+            <img src="images/64.png" width=64 height=64 />
+            <div id="inputbox">
+                <input type="text" id="uri" placeholder="Enter a valid URL" pattern="(?:[a-z]+:(?:[a-z]*:)?\/\/)?(?:([^:]+)(?::([^@]*))?@)?(?:(?:[\w-]+\.)+[a-z]{2,}|(?:\d{1,3}\.){3}\d{1,3})(?::(\d+))?\/(?:([^:?#]+))(?:([^\s]+))?" autofocus/>
+                <button id="submit">download</button>
+            </div>
+            <div id="search" style="display:none"><input type="search" results="10" placeholder="Search..." disabled/></div>
+        </div>
+        <div id="main">
+            <div id="toolbar">
+                <a href="#" id="clear">Clear inactive items</a>
+            </div>
+            <div id="display">
+                <div id="active"><div class="summary">Active downloads</div></div>
+                <div id="queued"><div class="summary">Queued downloads</div></div>
+                <div id="completed"><div class="summary">Completed downloads</div></div>
+                <div id="cancelled"><div class="summary">Cancelled downloads</div></div>
+            </div>
+        </div>
+        <div id="footer"></div>
+    </body>
+</html>
