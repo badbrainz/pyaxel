@@ -49,6 +49,7 @@ class conf_t():
     num_connections = 4
     reconnect_delay = 20
     save_state_interval = 10
+    search_top = 3
     user_agent = DEFAULT_USER_AGENT
 
 class confparser_c(ConfigParser.RawConfigParser):
@@ -91,6 +92,7 @@ def conf_load(conf, path):
     conf.num_connections = int(parser.getopt('num_connections', conf.num_connections))
     conf.reconnect_delay = int(parser.getopt('reconnect_delay', conf.reconnect_delay))
     conf.save_state_interval = int(parser.getopt('save_state_interval', conf.save_state_interval))
+    conf.search_top = int(parser.getopt('search_top', conf.search_top))
     conf.user_agent = str(parser.getopt('user_agent', conf.user_agent))
 
     return 1
