@@ -687,6 +687,7 @@ def main(argv=None):
         parser.print_help()
     else:
         try:
+            axel = None
             conf = conf_t()
 
             conf_init(conf)

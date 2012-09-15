@@ -40,7 +40,7 @@ class tokenbucket_c():
             self.credits -= tokens
         return max(0, expected_time)
 
-def pyaxel_new(conf, url):
+def pyaxel_new(conf, url, search=False):
     pyaxel = pyaxellib.pyaxel_t()
     pyaxel.conf = conf
 
