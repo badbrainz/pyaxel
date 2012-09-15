@@ -785,7 +785,7 @@ def main(argv=None):
 
 # TODO should include little cute dots
 def print_alternate_output(pyaxel):
-    if pyaxel.bytes_done < pyaxel.size:
+    if pyaxel.bytes_done <= pyaxel.size:
         sys.stdout.write('\r\x1b[K')
         sys.stdout.write('Progress: %d%%' % (pyaxel.bytes_done * 100 / pyaxel.size))
         seconds = int(pyaxel.finish_time - time.time())
