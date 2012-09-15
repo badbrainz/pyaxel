@@ -20,7 +20,8 @@ except:
     import pickle
 
 from collections import deque
-#from ConfigParser import SafeConfigParser
+
+PYAXEL_SRC_VERSION = '1.0.0'
 
 PYAXEL_PATH = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
 PYAXEL_CONFIG = 'pyaxel.cfg'
@@ -31,22 +32,24 @@ PROTO_HTTP = 2
 PROTO_DEFAULT = PROTO_HTTP
 SCHEME_DEFAULT = 'http'
 
-INT_MAX = sys.maxsize
+DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) '\
+    'Gecko/20100115 Firefox/3.6'
 
-STD_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) '\
-        'Gecko/20100115 Firefox/3.6',
-    'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-    'Accept-Language': 'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
-    'Accept-Encoding': 'gzip,deflate,sdch'
-}
+INT_MAX = sys.maxsize
 
 dbg_lvl = 0
 
 
 class conf_t():
-    pass
-
+    alternate_output = 0
+    buffer_size = 5120
+    default_filename = 'default'
+    max_speed = 0
+    max_reconnect = 5
+    num_connections = 1
+    reconnect_delay = 20
+    save_state_interval = 10
+    user_agent = DEFAULT_USER_AGENT
 
 class confparser_c(ConfigParser.RawConfigParser):
 
@@ -68,26 +71,10 @@ class confparser_c(ConfigParser.RawConfigParser):
 
 
 def conf_init(conf):
-    conf.alternate_output = 0
-    conf.buffer_size = 5120
-    conf.connection_timeout = 45
-    conf.default_filename = 'default'
-    conf.http_debug = 0
-    conf.max_speed = 0
-    conf.num_connections = 1
-    conf.reconnect_delay = 20
-    conf.save_state_interval = 10
-    conf.verbose = 1
-#    conf.http_proxy = 0
-#    conf.no_proxy = 0
-#    conf.strip_cgi_parameters = 1
-#    conf.search_timeout = 10
-#    conf.search_threads = 3
-#    conf.search_amount = 15
-#    conf.search_top = 3
-
     if not conf_load(conf, PYAXEL_PATH + PYAXEL_CONFIG):
         return 0
+
+    # TODO proxy?
 
     return 1
 
@@ -98,21 +85,13 @@ def conf_load(conf, path):
 
     conf.alternate_output = int(parser.getopt('alternate_output', conf.alternate_output))
     conf.buffer_size = int(parser.getopt('buffer_size', conf.buffer_size))
-    conf.connection_timeout = int(parser.getopt('connection_timeout', conf.connection_timeout))
     conf.default_filename = str(parser.getopt('default_filename', conf.default_filename))
-    conf.http_debug = int(parser.getopt('http_debug', conf.http_debug))
     conf.max_speed = int(parser.getopt('max_speed', conf.max_speed))
+    conf.max_reconnect = int(parser.getopt('max_reconnect', conf.max_reconnect))
     conf.num_connections = int(parser.getopt('num_connections', conf.num_connections))
     conf.reconnect_delay = int(parser.getopt('reconnect_delay', conf.reconnect_delay))
     conf.save_state_interval = int(parser.getopt('save_state_interval', conf.save_state_interval))
-    conf.verbose = int(parser.getopt('verbose', conf.verbose))
-#    conf.strip_cgi_parameters = int(parser.getopt('strip_cgi_parameters', conf.strip_cgi_parameters))
-#    conf.http_proxy = int(parser.getopt('http_proxy', conf.http_proxy))
-#    conf.no_proxy = int(parser.getopt('no_proxy', conf.no_proxy))
-#    conf.search_timeout = int(parser.getopt('search_timeout', search_timeout))
-#    conf.search_threads = int(parser.getopt('search_threads', search_threads))
-#    conf.search_amount = int(parser.getopt('search_amount', search_amount))
-#    conf.search_top = int(parser.getopt('search_top', search_top))
+    conf.user_agent = str(parser.getopt('user_agent', conf.user_agent))
 
     return 1
 
@@ -131,11 +110,11 @@ class pyaxel_t:
     message = []
     next_state = 0
     outfd = -1
-    ready = 0
-    save_state_interval = -1
+    ready = None
+    save_state_interval = 0
     size = 0
     start_time = None
-    url = ''
+    url = None
 
 
 def pyaxel_new(conf, count, url):
@@ -153,7 +132,7 @@ def pyaxel_new(conf, count, url):
     if count == 0:
         pyaxel.url.append(url)
     else:
-        pyaxel.url.extend(url[:count])
+        pyaxel.url.extend([search.url for search in url[:count]])
 
     pyaxel.conn = [conn_t() for i in xrange(conf.num_connections)]
     pyaxel.conn[0].conf = conf
@@ -253,6 +232,7 @@ def pyaxel_start(pyaxel):
     # TODO assign mirrors
     for i, conn in enumerate(pyaxel.conn):
         conn_set(conn, pyaxel.url[0])
+        pyaxel.url.rotate(1)
         conn.conf = pyaxel.conf
         if i:
             conn.supported = 1
@@ -525,6 +505,7 @@ def conn_info(conn):
         return 0
     conn_disconnect(conn)
     if not conn_set(conn, http_header(conn.http, 'location')):
+        conn.message = 'Invalid URL.';
         return 0
     # relative URL?
     # missing netloc?
@@ -563,7 +544,8 @@ def conn_setup(conn):
 #    conn.http.first_byte = conn.current_byte
 #    conn.http.last_byte = conn.last_byte
     http_setup(conn.http, s)
-    http_addheader(conn.http, 'User-Agent', STD_HEADERS['User-Agent'])
+    http_addheader(conn.http, 'User-Agent', conn.conf.user_agent)
+    http_addheader(conn.http, 'Accept-Encoding', 'gzip,deflate,sdch')
     if conn.last_byte:
         http_addheader(conn.http, 'Range', 'bytes=%d-%d' % (conn.current_byte, conn.last_byte))
     else:
@@ -674,65 +656,74 @@ def setup_thread(conn):
     return 0
 
 
+class search_c:
+    url = ''
+
+
 def main(argv=None):
     if argv is None:
         argv = sys.argv
 
     from optparse import OptionParser
-    parser = OptionParser(usage='Usage: %prog [options] url')
-    parser.add_option('-q', '--quiet', dest='verbose',
-                      default=False, action='store_true',
-                      help='leave stdout alone')
-    parser.add_option('-p', '--print', dest='http_debug',
-                      default=False, action='store_true',
-                      help='print HTTP info')
+    from optparse import IndentedHelpFormatter
+    fmt = IndentedHelpFormatter(indent_increment=4, max_help_position=40, width=77, short_first=1)
+    parser = OptionParser(usage='Usage: %prog [options] url[+]', formatter=fmt, version=PYAXEL_SRC_VERSION)
     parser.add_option('-n', '--num-connections', dest='num_connections',
-                      type='int', default=1,
-                      help='specify maximum number of connections',
-                      metavar='x')
+                      type='int', metavar='x',
+                      help='maximum number of connections')
     parser.add_option('-s', '--max-speed', dest='max_speed',
-                      type='int', default=0,
-                      help='specify maximum speed (bytes per second)',
-                      metavar='x')
+                      type='int', metavar='x',
+                      help='maximum speed (bytes per second)')
+    parser.add_option('-o', '--output-path', dest='download_path',
+                      type='string', metavar='x',
+                      help='local download directory')
+    parser.add_option('-u', '--user-agent', dest='user_agent',
+                      type='string', metavar='x',
+                      help='user agent header')
 
-    (options, args) = parser.parse_args()
+    options, args = parser.parse_args()
 
-    if len(args) != 1:
+    if len(args) == 0:
         parser.print_help()
     else:
         try:
-            # TODO search mirrors
-            url = args[0]
             conf = conf_t()
 
             conf_init(conf)
             if not conf_load(conf, PYAXEL_PATH + PYAXEL_CONFIG):
                 return 1
 
-            for prop in options.__dict__:
-                    if not callable(options.__dict__[prop]):
-                        setattr(conf, prop, getattr(options, prop))
+            options = vars(options)
+            for prop in options:
+                if options[prop] != None:
+                    setattr(conf, prop, options[prop])
 
-            conf.verbose = bool(conf.verbose)
-            conf.http_debug = bool(conf.http_debug)
-            conf.num_connections = options.num_connections
-            axel = pyaxel_new(conf, 0, url)
+            if len(args) == 1:
+                axel = pyaxel_new(conf, 0, args[0])
+            else:
+                # TODO mirror file comparison
+                search = []
+                for arg in args:
+                    search.append(search_c())
+                    search[len(search) - 1].url = arg
+                axel = pyaxel_new(conf, len(search), search)
+
             if axel.ready == -1:
                 pyaxel_print(axel)
                 return 1
 
             pyaxel_print(axel)
 
+            if not hasattr(conf, 'download_path') or not conf.download_path:
+                conf.download_path = PYAXEL_PATH
+            if not conf.download_path.endswith(os.path.sep):
+                conf.download_path += os.path.sep
+            axel.file_name = conf.download_path + axel.file_name
+
             # TODO check permissions, destination opt, etc.
-            if not bool(os.stat(os.getcwd()).st_mode & stat.S_IWUSR):
-                print 'Can\'t access protected directory: %s' % os.getcwd()
+            if not bool(os.stat(conf.download_path).st_mode & stat.S_IWUSR):
+                print 'Can\'t access protected directory: %s' % conf.download_path
                 return 1
-#            if not os.access(axel.file_name, os.F_OK):
-#                print 'Couldn\'t access %s' % axel.file_name
-#                return 0
-#            if not os.access('%s.st' % axel.file_name, os.F_OK):
-#                print 'Couldn\'t access %s.st' % axel.file_name
-#                return 0
 
             if not pyaxel_open(axel):
                 pyaxel_print(axel)
@@ -749,7 +740,9 @@ def main(argv=None):
                     if not axel.message and prev != axel.bytes_done:
                         print_alternate_output(axel)
                 else:
-                    pass
+                    # TODO use wget-style
+                    if not axel.message and prev != axel.bytes_done:
+                        print_alternate_output(axel)
 
                 if axel.message:
                     if conf.alternate_output:
@@ -759,7 +752,9 @@ def main(argv=None):
                     pyaxel_print(axel)
                     if not axel.ready:
                         if conf.alternate_output != 1:
-                            pass
+                            # TODO use wget-style
+                            if not axel.message and prev != axel.bytes_done:
+                                print_alternate_output(axel)
                         else:
                             print_alternate_output(axel)
                 elif axel.ready:
@@ -770,17 +765,18 @@ def main(argv=None):
         except KeyboardInterrupt:
             print
             return 1
-        except:
-            print
+        except Exception, e:
+            print e
             print 'Unknown error!'
             return 1
 
         return 0
 
+# TODO should include little cute dots
 def print_alternate_output(pyaxel):
     if pyaxel.bytes_done < pyaxel.size:
         sys.stdout.write('\r\x1b[K')
-        sys.stdout.write('[%d%%]' % (pyaxel.bytes_done * 100 / pyaxel.size))
+        sys.stdout.write('Progress: %d%%' % (pyaxel.bytes_done * 100 / pyaxel.size))
         seconds = int(pyaxel.finish_time - time.time())
         minutes = int(seconds / 60)
         seconds -= minutes * 60
@@ -795,20 +791,6 @@ def print_alternate_output(pyaxel):
         else:
             sys.stdout.write(' [%dm %ds]' % (minutes, seconds))
     sys.stdout.flush()
-
-def get_time_left(time_in_secs):
-    ret_str = ""
-    mult_list = [60, 60 * 60, 60 * 60 * 24]
-    unit_list = ["second(s)", "minute(s)", "hour(s)", "day(s)"]
-    for i in range(len(mult_list)):
-        if time_in_secs < mult_list[i]:
-            pval = int(time_in_secs / (mult_list[i - 1] if i > 0 else 1))
-            ret_str = "%d %s" % (pval, unit_list[i])
-            break
-    if len(ret_str) == 0:
-        ret_str = "%d %s." % (int(time_in_secs / mult_list[2]), \
-                                  unit_list[3])
-    return ret_str
 
 if __name__ == '__main__':
     sys.exit(main())
