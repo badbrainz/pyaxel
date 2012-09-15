@@ -46,7 +46,7 @@ class conf_t():
     default_filename = 'default'
     max_speed = 0
     max_reconnect = 5
-    num_connections = 1
+    num_connections = 4
     reconnect_delay = 20
     save_state_interval = 10
     user_agent = DEFAULT_USER_AGENT
