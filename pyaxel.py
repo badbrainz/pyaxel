@@ -317,6 +317,7 @@ def pyaxel_do(pyaxel):
                 pyaxel_message(pyaxel, 'Restarting connection %d.' % pyaxel.conn.index(conn))
                 # TODO try another URL
                 conn_set(conn, pyaxel.url[0])
+                pyaxel.url.rotate(1)
                 conn.state = 1
                 conn.setup_thread = threading.Thread(target=setup_thread, args=(conn,))
                 conn.setup_thread.daemon = True
@@ -727,6 +728,7 @@ def main(argv=None):
                 conf.download_path = PYAXEL_PATH
             if not conf.download_path.endswith(os.path.sep):
                 conf.download_path += os.path.sep
+
             axel.file_name = conf.download_path + axel.file_name
 
             # TODO check permissions, destination opt, etc.
