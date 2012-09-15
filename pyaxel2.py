@@ -55,9 +55,7 @@ def pyaxel_new(conf, url, search=False):
     else:
         pyaxel.url.append(url)
 
-    pyaxel.conn = [pyaxellib.conn_t() for i in xrange(pyaxel.conf.num_connections)]
-    pyaxel.conn[0].conf = conf
-    pyaxellib.conn_set(pyaxel.conn[0], pyaxel.url[0])
+    pyaxellib.pyaxel_message(pyaxel, 'Initializing download.')
 
     pyaxel.active_threads = 1
     pyaxel.threads = threadpool.ThreadPool(1)
@@ -83,7 +81,7 @@ def pyaxel_do(pyaxel):
     for job in pyaxel.threads.iterProcessedJobs(0):
         state, item = job.result()
         if state == -5: # initialization_thread
-            pyaxellib.pyaxel_message(pyaxel, 'Initializing download.')
+            pyaxellib.pyaxel_message(pyaxel, 'Configuring download.')
             pyaxel.threads.addJob(threadpool.JobRequest(configuration_thread, [pyaxel]))
         elif state == -4: # configuration_thread
             pyaxellib.pyaxel_message(pyaxel, 'Starting download.')
@@ -200,23 +198,30 @@ def initialize_thread(pyaxel):
     if not bool(os.stat(pyaxel.conf.download_path).st_mode & stat.S_IWUSR):
         return (-3, pyaxel)
 
-    if not pyaxellib.conn_set(pyaxel.conn[0], pyaxel.url[0]):
-        pyaxellib.pyaxel_error(pyaxel, 'Could not parse URL.')
+    pyaxel.conn = [pyaxellib.conn_t() for i in xrange(pyaxel.conf.num_connections)]
+    pyaxel.conn[0].conf = pyaxel.conf
+
+    for i in xrange(len(pyaxel.url)):
+        url = pyaxel.url.pop()
+        if not pyaxellib.conn_set(pyaxel.conn[0], url):
+            pyaxellib.pyaxel_error(pyaxel, 'Could not parse URL: %s' % url)
+            continue
+
+        if not pyaxellib.conn_init(pyaxel.conn[0]):
+            pyaxellib.pyaxel_error(pyaxel, pyaxel.conn[0].message)
+            continue
+
+        if not pyaxellib.conn_info(pyaxel.conn[0]):
+            pyaxellib.pyaxel_error(pyaxel, pyaxel.conn[0].message)
+            continue
+
+        pyaxel.url.append(pyaxellib.conn_url(pyaxel.conn[0]))
+        break
+
+    if not pyaxel.conn[0].size:
         pyaxel.ready = -1
         return (-1, pyaxel)
 
-    if not pyaxellib.conn_init(pyaxel.conn[0]):
-        pyaxellib.pyaxel_error(pyaxel, pyaxel.conn[0].message)
-        pyaxel.ready = -1
-        return (-1, pyaxel)
-
-    if not pyaxellib.conn_info(pyaxel.conn[0]):
-        pyaxellib.pyaxel_error(pyaxel, pyaxel.conn[0].message)
-        pyaxel.ready = -1
-        return (-1, pyaxel)
-
-    s = pyaxellib.conn_url(pyaxel.conn[0])
-    pyaxel.url[0] = s
     pyaxel.size = pyaxel.conn[0].size
     if pyaxel.size != pyaxellib.INT_MAX:
         pyaxellib.pyaxel_message(pyaxel, 'File size: %d' % pyaxel.size)
@@ -225,8 +230,6 @@ def initialize_thread(pyaxel):
     pyaxel.file_name = pyaxel.file_name.replace('/', '_')
     pyaxel.file_name = pyaxellib.http_decode(pyaxel.file_name) or pyaxel.conf.default_filename
     pyaxel.file_name = pyaxel.conf.download_path + pyaxel.file_name
-
-#    pyaxel.conn = [pyaxellib.conn_t() for i in xrange(pyaxel.conf.num_connections)]
 
     if not pyaxellib.pyaxel_open(pyaxel):
         pyaxellib.pyaxel_error(pyaxel, pyaxel.last_error)
