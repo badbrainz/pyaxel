@@ -101,15 +101,41 @@ function runCommand(var_args) {
         if (!args[1])
             return;
         var expr = matchUrlExpression(args[1]);
-        if (!jobqueue.search('unassigned').some(expr) &&
-            !jobqueue.search('active').some(expr)) {
-            var download = jobqueue.new(args[1]);
-            download.status = DownloadStatus.QUEUED;
-            download.date = today();
-            jobqueue.add(download, args[2]);
-            notifyPorts([download]);
-            if (!args[2])
-                client.establish();
+        if (!jobqueue.search('unassigned').some(expr) && !jobqueue.search('active').some(expr)) {
+            if (/\.meta|(?:4|link)$/i.test(parseUri(args[1]).fileName)) {
+                io.http(args[1], function(xml) {
+                    try {
+                        var doc = xml.getElementsByTagNameNS('urn:ietf:params:xml:ns:metalink','metalink');
+                        var file = doc[0].getElementsByTagName('file');
+                        var search = file[0].getElementsByTagName('url');
+                        var download = jobqueue.new();
+                        download.url = args[1];
+                        download.search = Array.prototype.map.call(search, function(node) {
+                            return node.textContent;
+                        });
+                        download.status = DownloadStatus.QUEUED;
+                        download.date = today();
+                        jobqueue.add(download, args[2]);
+                        notifyPorts([download]);
+                        if (!args[2])
+                            client.establish();
+                    }
+                    catch (err) {
+                        console.log(err.stack)
+                    }
+                });
+            }
+            else {
+                var download = jobqueue.new();
+                download.url = args[1];
+                download.search = [args[1]];
+                download.status = DownloadStatus.QUEUED;
+                download.date = today();
+                jobqueue.add(download, args[2]);
+                notifyPorts([download]);
+                if (!args[2])
+                    client.establish();
+            }
         }
         break;
 
@@ -136,7 +162,7 @@ function runCommand(var_args) {
             client.send(job_map[args[1]], {
                 'cmd': ServerCommand.START,
                 'arg': {
-                    'url': download.url,
+                    'url': download.search,
                     'conf': getDownloadConfig()
                 }
             });
@@ -200,7 +226,7 @@ function message_handler(connection, response) {
         connection.send({
             'cmd': ServerCommand.START,
             'arg': {
-                'url': download.url,
+                'url': download.search,
                 'conf': getDownloadConfig()
             }
         });
@@ -244,7 +270,7 @@ function message_handler(connection, response) {
             connection.send({
                 'cmd': ServerCommand.START,
                 'arg': {
-                    'url': job.url,
+                    'url': job.search,
                     'conf': getDownloadConfig()
                 }
             });
@@ -264,7 +290,7 @@ function message_handler(connection, response) {
             connection.send({
                 'cmd': ServerCommand.START,
                 'arg': {
-                    'url': job.url,
+                    'url': job.search,
                     'conf': getDownloadConfig()
                 }
             });
