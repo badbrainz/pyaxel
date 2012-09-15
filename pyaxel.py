@@ -680,6 +680,10 @@ def main(argv=None):
     parser.add_option('-u', '--user-agent', dest='user_agent',
                       type='string', metavar='x',
                       help='user agent header')
+    parser.add_option('-S', '--search', action='callback',
+                      callback=lambda o,s,v,p: setattr(p.values, o.dest, v.split(',')),
+                      type='string', metavar='x,',
+                      help='search for mirrors and download from x servers')
 
     options, args = parser.parse_args()
 
@@ -696,17 +700,21 @@ def main(argv=None):
 
             options = vars(options)
             for prop in options:
-                if options[prop] != None:
+                if hasattr(conf, prop) and options[prop] != None:
                     setattr(conf, prop, options[prop])
 
+            if hasattr(options, 'search'):
+                # TODO
+                #   search mirrors
+                pass
             if len(args) == 1:
                 axel = pyaxel_new(conf, 0, args[0])
             else:
-                # TODO mirror file comparison
+                # TODO resource comparison?
                 search = []
                 for arg in args:
                     search.append(search_c())
-                    search[len(search) - 1].url = arg
+                    search[-1].url = arg
                 axel = pyaxel_new(conf, len(search), search)
 
             if axel.ready == -1:
