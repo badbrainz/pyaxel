@@ -171,6 +171,7 @@ def pyaxel_open(pyaxel):
 
     pyaxel.outfd = -1
 
+    # FIXME mirrors?
     if not pyaxel.conn[0].supported:
         pyaxel_message(pyaxel, 'Server unsupported. Starting with one connection.')
         pyaxel.conf.num_connections = 1
@@ -179,11 +180,7 @@ def pyaxel_open(pyaxel):
     else:
         try:
             with open('%s.st' % pyaxel.file_name, 'rb') as fd:
-                try:
-                    st = pickle.load(fd)
-                except pickle.UnpicklingError:
-                    # TODO break from context
-                    pass
+                st = pickle.load(fd)
 
                 pyaxel.conf.num_connections = st['num_connections']
 
@@ -209,7 +206,7 @@ def pyaxel_open(pyaxel):
                 except os.error:
                     pyaxel_error(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
                     return 0
-        except (IOError, EOFError):
+        except (IOError, EOFError, pickle.UnpicklingError):
             pass
 
     if pyaxel.outfd == -1:
