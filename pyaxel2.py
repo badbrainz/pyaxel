@@ -104,6 +104,7 @@ def pyaxel_do(pyaxel):
                 pyaxellib.pyaxel_message(pyaxel, 'Error on connection %d.' % pyaxel.conn.index(item))
             pyaxellib.pyaxel_message(pyaxel, 'Restarting connection %d.' % pyaxel.conn.index(item))
             pyaxellib.conn_set(item, pyaxel.url[0])
+            pyaxel.url.rotate(1)
             item.last_transfer = time.time()
             item.reconnect_count += 1
             item.state = 1
