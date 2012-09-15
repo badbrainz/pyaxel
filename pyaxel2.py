@@ -40,7 +40,7 @@ class tokenbucket_c():
             self.credits -= tokens
         return max(0, expected_time)
 
-def pyaxel_new(conf, url, search=False):
+def pyaxel_new(conf, url):
     pyaxel = pyaxellib.pyaxel_t()
     pyaxel.conf = conf
 
@@ -49,11 +49,10 @@ def pyaxel_new(conf, url, search=False):
     if not pyaxel.conf.download_path.endswith(os.path.sep):
         pyaxel.conf.download_path += os.path.sep
 
-    pyaxel.url = Queue.deque()
     if type(url) is list:
-        pyaxel.url.extend([search.url for search in url])
+        pyaxel.url = Queue.deque(url)
     else:
-        pyaxel.url.append(url)
+        pyaxel.url = Queue.deque([url])
 
     pyaxellib.pyaxel_message(pyaxel, 'Initializing download.')
 
@@ -107,12 +106,12 @@ def pyaxel_do(pyaxel):
             item.reconnect_count += 1
             item.state = 1
             threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.threads.addJob, [threadpool.JobRequest(setup_thread, [item])]).start()
-        if state == 2:
+        elif state == 2:
             pyaxel.active_threads -= 1
             pyaxellib.pyaxel_message(pyaxel, 'Write error!')
             pyaxellib.conn_disconnect(item)
         elif state == 3:
-            pyaxellib.pyaxel_message(pyaxel, 'Connection %d opened.' % pyaxel.conn.index(item))
+            pyaxellib.pyaxel_message(pyaxel, 'Connection %d opened: %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
             pyaxel.threads.addJob(threadpool.JobRequest(download_thread, [pyaxel, item]))
         elif state == 4:
             pyaxel.active_threads -= 1
@@ -359,12 +358,7 @@ def main(argv=None):
                     setattr(conf, prop, options[prop])
 
             # TODO mirror file comparison
-            search = []
-            for arg in args:
-                search.append(pyaxellib.search_c())
-                search[len(search) - 1].url = arg
-
-            axel = pyaxel_new(conf, search)
+            axel = pyaxel_new(conf, args)
 
             while axel.active_threads:
                 pyaxel_do(axel)
