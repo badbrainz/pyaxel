@@ -83,6 +83,7 @@ def pyaxel_do(pyaxel):
             pyaxellib.pyaxel_message(pyaxel, 'Configuring download.')
             pyaxel.threads.addJob(threadpool.JobRequest(configuration_thread, [pyaxel]))
         elif state == -4: # configuration_thread
+            pyaxel.active_threads -= 1
             pyaxellib.pyaxel_message(pyaxel, 'Starting download.')
         elif state == -3: # initialization_thread
             pyaxel.active_threads -= 1
