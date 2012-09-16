@@ -112,6 +112,16 @@ def pyaxel_do(pyaxel):
             pyaxellib.pyaxel_message(pyaxel, 'Write error!')
             pyaxellib.conn_disconnect(item)
         elif state == 3:
+            if len(pyaxel.url) > 1 and item.http.status != 206:
+                pyaxellib.conn_disconnect(item)
+                pyaxellib.pyaxel_message(pyaxel, 'Connection %d unsupported: %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
+                pyaxellib.conn_set(item, pyaxel.url[0])
+                pyaxel.url.rotate(1)
+                item.last_transfer = time.time()
+                item.reconnect_count += 1
+                item.state = 1
+                threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.threads.addJob, [threadpool.JobRequest(setup_thread, [item])]).start()
+                continue
             pyaxellib.pyaxel_message(pyaxel, 'Connection %d opened: %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
             pyaxel.threads.addJob(threadpool.JobRequest(download_thread, [pyaxel, item]))
         elif state == 4:
@@ -245,9 +255,6 @@ def initialize_thread(pyaxel):
     return (-5, pyaxel)
 
 def configuration_thread(pyaxel):
-    pyaxel.active_threads = pyaxel.conf.num_connections
-    pyaxel.threads.addWorkers(pyaxel.conf.num_connections - 1)
-
     for i, conn in enumerate(pyaxel.conn):
         pyaxellib.conn_set(conn, pyaxel.url[0])
         pyaxel.url.rotate(1)
@@ -268,12 +275,14 @@ def configuration_thread(pyaxel):
     pyaxel.start_time = time.time()
     pyaxel.bytes_start = pyaxel.bytes_done
 
+    pyaxel.threads.addWorkers(pyaxel.conf.num_connections - 1)
     for conn in pyaxel.conn:
         conn.start_byte = conn.current_byte
-        if conn.current_byte <= conn.last_byte:
+        if conn.current_byte < conn.last_byte:
             conn.delay = 0
             conn.state = 1
             conn.reconnect_count = 0
+            pyaxel.active_threads += 1
             pyaxel.threads.addJob(threadpool.JobRequest(setup_thread, [conn]))
             conn.last_transfer = time.time()
 
