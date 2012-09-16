@@ -121,5 +121,6 @@ a.url{
 }
 #inputbox input{
 	-webkit-box-flex:1;
-	display:-webkit-box
+	display:-webkit-box;
+	margin-right:6px
 }
