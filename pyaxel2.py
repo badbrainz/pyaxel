@@ -286,7 +286,7 @@ def configuration_thread(pyaxel):
     return (-4, pyaxel)
 
 def download_thread(pyaxel, conn):
-    while conn.enabled == 1:
+    while pyaxel.ready == 0:
         conn.last_transfer = time.time()
         fetch_size = min(conn.last_byte + 1 - conn.current_byte, pyaxel.conf.buffer_size)
         try:
