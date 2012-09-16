@@ -10,6 +10,7 @@ var settings = new Settings(window.localStorage, {
     'prefs.output': 1,
     'prefs.path': '',
     'prefs.port': 8002,
+    'prefs.options': 0,
     'prefs.speed': 0,
     'prefs.splits': 4
 });

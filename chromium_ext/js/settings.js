@@ -134,30 +134,31 @@ function save_input(e) {
 
 var events = {
     blur: {
+        'downloads': save_input,
         'host': save_input,
         'port': save_input,
         'path': save_input,
         'speed': save_input,
-        'splits': save_input,
-        'downloads': save_input,
+        'splits': save_input
     },
 
     keyup: {
         'host': check_character,
+        'downloads': check_character,
         'port': check_character,
         'path': check_character,
         'splits': check_character,
-        'downloads': check_character,
-        'speed': check_character,
+        'speed': check_character
     },
 
     click: {
-        'settingstab': activate_tab,
-        'uitab': activate_tab,
-        'manualtab': activate_tab,
         'abouttab': activate_tab,
+        'echo': check_server,
+        'manualtab': activate_tab,
+        'options': save_input,
         'output': save_input,
-        'echo': check_server
+        'settingstab': activate_tab,
+        'uitab': activate_tab
     }
 };
 
@@ -200,16 +201,19 @@ var settings = {
         else if (e.type === 'DOMContentLoaded') {
             with (settings) {
                 var d = document;
+
+                echo = d.querySelector('#echo');
                 hostname = d.querySelector('#host');
-                portnum = d.querySelector('#port');
-                path = d.querySelector('#path');
                 maxsplits = d.querySelector('#splits');
                 maxdownloads = d.querySelector('#downloads');
                 output = d.querySelector('#output');
+                portnum = d.querySelector('#port');
+                path = d.querySelector('#path');
+                options = d.querySelector('#options');
                 speed_inp = d.querySelector('#speed');
-                tabbar = d.querySelector('#tabbar');
                 version = d.querySelector('#version');
-                echo = d.querySelector('#echo');
+
+                tabbar = d.querySelector('#tabbar');
                 tabs = [d.querySelector('#settingstab'),
                     d.querySelector('#uitab'),
                     d.querySelector('#manualtab'),
@@ -226,6 +230,7 @@ var settings = {
                 maxsplits.value = background.getPreference('prefs.splits');
                 maxdownloads.value = background.getPreference('prefs.downloads');
                 output.checked = +background.getPreference('prefs.output');
+                options.checked = +background.getPreference('prefs.options');
                 speed_inp.value = background.getPreference('prefs.speed');
             }
 
