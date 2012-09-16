@@ -46,9 +46,10 @@ class conf_t():
     default_filename = 'default'
     max_speed = 0
     max_reconnect = 5
-    num_connections = 1
+    num_connections = 4
     reconnect_delay = 20
     save_state_interval = 10
+    search_top = 3
     user_agent = DEFAULT_USER_AGENT
 
 class confparser_c(ConfigParser.RawConfigParser):
@@ -91,6 +92,7 @@ def conf_load(conf, path):
     conf.num_connections = int(parser.getopt('num_connections', conf.num_connections))
     conf.reconnect_delay = int(parser.getopt('reconnect_delay', conf.reconnect_delay))
     conf.save_state_interval = int(parser.getopt('save_state_interval', conf.save_state_interval))
+    conf.search_top = int(parser.getopt('search_top', conf.search_top))
     conf.user_agent = str(parser.getopt('user_agent', conf.user_agent))
 
     return 1
@@ -171,6 +173,7 @@ def pyaxel_open(pyaxel):
 
     pyaxel.outfd = -1
 
+    # FIXME mirrors?
     if not pyaxel.conn[0].supported:
         pyaxel_message(pyaxel, 'Server unsupported. Starting with one connection.')
         pyaxel.conf.num_connections = 1
@@ -179,11 +182,7 @@ def pyaxel_open(pyaxel):
     else:
         try:
             with open('%s.st' % pyaxel.file_name, 'rb') as fd:
-                try:
-                    st = pickle.load(fd)
-                except pickle.UnpicklingError:
-                    # TODO break from context
-                    pass
+                st = pickle.load(fd)
 
                 pyaxel.conf.num_connections = st['num_connections']
 
@@ -209,7 +208,7 @@ def pyaxel_open(pyaxel):
                 except os.error:
                     pyaxel_error(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
                     return 0
-        except (IOError, EOFError):
+        except (IOError, EOFError, pickle.UnpicklingError):
             pass
 
     if pyaxel.outfd == -1:
@@ -317,6 +316,7 @@ def pyaxel_do(pyaxel):
                 pyaxel_message(pyaxel, 'Restarting connection %d.' % pyaxel.conn.index(conn))
                 # TODO try another URL
                 conn_set(conn, pyaxel.url[0])
+                pyaxel.url.rotate(1)
                 conn.state = 1
                 conn.setup_thread = threading.Thread(target=setup_thread, args=(conn,))
                 conn.setup_thread.daemon = True
@@ -680,6 +680,10 @@ def main(argv=None):
     parser.add_option('-u', '--user-agent', dest='user_agent',
                       type='string', metavar='x',
                       help='user agent header')
+    parser.add_option('-S', '--search', action='callback',
+                      callback=lambda o,s,v,p: setattr(p.values, o.dest, v.split(',')),
+                      type='string', metavar='x,',
+                      help='search for mirrors and download from x servers')
 
     options, args = parser.parse_args()
 
@@ -687,6 +691,7 @@ def main(argv=None):
         parser.print_help()
     else:
         try:
+            axel = None
             conf = conf_t()
 
             conf_init(conf)
@@ -695,17 +700,21 @@ def main(argv=None):
 
             options = vars(options)
             for prop in options:
-                if options[prop] != None:
+                if hasattr(conf, prop) and options[prop] != None:
                     setattr(conf, prop, options[prop])
 
+            if hasattr(options, 'search'):
+                # TODO
+                #   search mirrors
+                pass
             if len(args) == 1:
                 axel = pyaxel_new(conf, 0, args[0])
             else:
-                # TODO mirror file comparison
+                # TODO resource comparison?
                 search = []
                 for arg in args:
                     search.append(search_c())
-                    search[len(search) - 1].url = arg
+                    search[-1].url = arg
                 axel = pyaxel_new(conf, len(search), search)
 
             if axel.ready == -1:
@@ -718,6 +727,7 @@ def main(argv=None):
                 conf.download_path = PYAXEL_PATH
             if not conf.download_path.endswith(os.path.sep):
                 conf.download_path += os.path.sep
+
             axel.file_name = conf.download_path + axel.file_name
 
             # TODO check permissions, destination opt, etc.
@@ -774,7 +784,7 @@ def main(argv=None):
 
 # TODO should include little cute dots
 def print_alternate_output(pyaxel):
-    if pyaxel.bytes_done < pyaxel.size:
+    if pyaxel.bytes_done <= pyaxel.size:
         sys.stdout.write('\r\x1b[K')
         sys.stdout.write('Progress: %d%%' % (pyaxel.bytes_done * 100 / pyaxel.size))
         seconds = int(pyaxel.finish_time - time.time())
