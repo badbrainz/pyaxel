@@ -52,6 +52,16 @@ function message(type, msg) {
     settings.noteid = window.setTimeout(hide_tooltip, 5000);
 }
 
+function show_advanced_options(show) {
+    var elms = document.getElementsByClassName('extra');
+    if (show)
+        for (var i = 0; i < elms.length; i++)
+            elms[i].classList.remove('hidden');
+    else
+        for (var i = 0; i < elms.length; i++)
+            elms[i].classList.add('hidden');
+}
+
 function activate_tab(e) {
     var tabs = settings.tabs;
     for (var i=0; i < tabs.length; i++) {
@@ -63,6 +73,10 @@ function activate_tab(e) {
         tabs[i].classList.remove('curr');
         settings.panels[i].classList.remove('curr');
     }
+}
+
+function activate_advanced_options(e) {
+    show_advanced_options(e.target.checked);
 }
 
 function validate_input(e) {
@@ -78,12 +92,16 @@ function validate_input(e) {
                 return 'Invalid path';
         }
 
-        else if ('port' === e.target.id || 'speed' === e.target.id) {
+        else if ('port' === e.target.id||
+            'speed' === e.target.id ||
+            'reconnect' === e.target.id ||
+            'delay' === e.target.id) {
             if (!v || isNaN(v) || v < 0)
                 return 'Invalid number';
         }
 
-        else if ('splits' === e.target.id || 'downloads' === e.target.id) {
+        else if ('splits' === e.target.id ||
+            'downloads' === e.target.id) {
             if (v && isNaN(v) || v < 0)
                 return 'Invalid number';
             if (e.target.value < +e.target.min)
@@ -95,21 +113,17 @@ function validate_input(e) {
 }
 
 function get_input_value(elm) {
-    if (elm.type === 'text' || elm.type === 'number') {
+    if (elm.type === 'text' || elm.type === 'number')
         return elm.value.trim();
-    }
-    else if (elm.type === 'checkbox') {
+    else if (elm.type === 'checkbox')
         return +elm.checked;
-    }
 }
 
 function set_input_value(elm, val) {
-    if (elm.type === 'text' || elm.type === 'number') {
+    if (elm.type === 'text' || elm.type === 'number')
         elm.value = val;
-    }
-    else if (elm.type === 'checkbox') {
+    else if (elm.type === 'checkbox')
         elm.checked = val;
-    }
 }
 
 function check_character(e) {
@@ -134,8 +148,10 @@ function save_input(e) {
 
 var events = {
     blur: {
+        'delay': save_input,
         'downloads': save_input,
         'host': save_input,
+        'reconnect': save_input,
         'port': save_input,
         'path': save_input,
         'speed': save_input,
@@ -143,8 +159,10 @@ var events = {
     },
 
     keyup: {
-        'host': check_character,
+        'delay': check_character,
         'downloads': check_character,
+        'host': check_character,
+        'reconnect': check_character,
         'port': check_character,
         'path': check_character,
         'splits': check_character,
@@ -155,7 +173,7 @@ var events = {
         'abouttab': activate_tab,
         'echo': check_server,
         'manualtab': activate_tab,
-        'options': save_input,
+        'options': [save_input, activate_advanced_options],
         'output': save_input,
         'settingstab': activate_tab,
         'uitab': activate_tab
@@ -163,49 +181,44 @@ var events = {
 };
 
 var settings = {
-    background: chrome.extension.getBackgroundPage(),
+    background:null,
+    delay:null,
     echo:null,
     hostname:null,
     path:null,
     maxsplits:null,
     maxdownloads:null,
+    maxreconns:null,
+    options:null,
     portnum:null,
     speed_inp:null,
     version:null,
     tabbar:null,
     panels:null,
     tabs:null,
-    noteid: -1,
+    noteid:-1,
 
     handleEvent: function(e) {
-        if (e.type === 'click') {
-            if (!e.target.hasAttribute('disabled') && e.target.id in events.click)
-                events.click[e.target.id].call(window, e);
-        }
-
-        else if (e.type === 'blur') {
-            if (!e.target.hasAttribute('disabled') && e.target.id in events.blur)
-                events.blur[e.target.id].call(window, e);
-        }
-
-        else if (e.type === 'input') {
-            if (!e.target.hasAttribute('disabled') && e.target.id in events.input)
-                events.input[e.target.id].call(window, e);
-        }
-
-        else if (e.type === 'keyup') {
-            if (!e.target.hasAttribute('disabled') && e.target.id in events.keyup)
-                events.keyup[e.target.id].call(window, e);
+        if (e.type in events) {
+            if (!e.target.hasAttribute('disabled') && e.target.id in events[e.type]) {
+                if (typeOf(events.click[e.target.id]) == 'array')
+                    for (var i = 0; i < events.click[e.target.id].length; i++)
+                        events[e.type][e.target.id][i].call(window, e);
+                else
+                    events[e.type][e.target.id].call(window, e);
+            }
         }
 
         else if (e.type === 'DOMContentLoaded') {
             with (settings) {
                 var d = document;
 
+                delay = d.querySelector('#delay');
                 echo = d.querySelector('#echo');
                 hostname = d.querySelector('#host');
                 maxsplits = d.querySelector('#splits');
                 maxdownloads = d.querySelector('#downloads');
+                maxreconns = d.querySelector('#reconnect');
                 output = d.querySelector('#output');
                 portnum = d.querySelector('#port');
                 path = d.querySelector('#path');
@@ -223,23 +236,30 @@ var settings = {
                     d.querySelector('#manualpanel'),
                     d.querySelector('#aboutpanel')];
 
-                version.innerText = background.getPreference('data.version');
+                background = chrome.extension.getBackgroundPage();
+                delay.value = background.getPreference('prefs.delay');
                 hostname.value = background.getPreference('prefs.host');
-                portnum.value = background.getPreference('prefs.port');
-                path.value = background.getPreference('prefs.path');
                 maxsplits.value = background.getPreference('prefs.splits');
                 maxdownloads.value = background.getPreference('prefs.downloads');
+                maxreconns.value = background.getPreference('prefs.reconnect');
                 output.checked = +background.getPreference('prefs.output');
                 options.checked = +background.getPreference('prefs.options');
+                portnum.value = background.getPreference('prefs.port');
+                path.value = background.getPreference('prefs.path');
                 speed_inp.value = background.getPreference('prefs.speed');
+                version.innerText = background.getPreference('data.version');
             }
+
+            show_advanced_options(options.checked);
 
             settings.tabs[0].classList.add('curr');
             settings.panels[0].classList.add('curr');
             settings.panels[0].addEventListener('blur', settings, true);
             settings.panels[0].addEventListener('click', settings, false);
-            settings.panels[1].addEventListener('click', settings, false);
             settings.panels[0].addEventListener('keyup', settings, true);
+            settings.panels[1].addEventListener('blur', settings, true);
+            settings.panels[1].addEventListener('click', settings, false);
+            settings.panels[1].addEventListener('keyup', settings, true);
             settings.tabbar.addEventListener('click', settings, false);
         }
     }
