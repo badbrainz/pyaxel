@@ -115,7 +115,7 @@ def pyaxel_do(pyaxel):
                 pyaxellib.conn_set(item, pyaxel.url[0])
                 pyaxel.url.rotate(1)
                 item.last_transfer = time.time()
-                item.reconnect_count += 1
+                item.reconnect_count = 0
                 threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.threads.addJob, [threadpool.JobRequest(setup_thread, [item])]).start()
                 continue
             pyaxellib.pyaxel_message(pyaxel, 'Connection %d opened: %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
