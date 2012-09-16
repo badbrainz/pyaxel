@@ -215,10 +215,13 @@ def initialize_thread(pyaxel):
             pyaxellib.pyaxel_error(pyaxel, pyaxel.conn[0].message)
             continue
 
+        if pyaxel.conn[0].supported == 0 and len(pyaxel.url) > 0:
+            continue
+
         pyaxel.url.append(pyaxellib.conn_url(pyaxel.conn[0]))
         break
 
-    if not pyaxel.conn[0].size:
+    if len(pyaxel.url) == 0:
         pyaxel.ready = -1
         return (-1, pyaxel)
 
