@@ -11,6 +11,8 @@ var settings = new Settings(window.localStorage, {
     'prefs.path': '',
     'prefs.port': 8002,
     'prefs.options': 0,
+    'prefs.reconnect': 5,
+    'prefs.delay': 20,
     'prefs.speed': 0,
     'prefs.splits': 4
 });
@@ -368,9 +370,11 @@ function setPreference(key, val) {
 function getDownloadConfig() {
     return {
         'alternate_output': settings.getObject('prefs.output'),
+        'download_path': settings.getItem('prefs.path'),
+        'reconnect_delay': settings.getObject('prefs.delay'),
         'max_speed': settings.getObject('prefs.speed'),
-        'num_connections': settings.getObject('prefs.splits'),
-        'download_path': settings.getItem('prefs.path')
+        'max_reconnect': settings.getObject('prefs.reconnect'),
+        'num_connections': settings.getObject('prefs.splits')
     };
 }
 
