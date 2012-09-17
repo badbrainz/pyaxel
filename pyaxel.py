@@ -614,7 +614,7 @@ def http_header(http, name):
 
 def http_exec(http):
     try:
-        response = http.opener.open(http.request, timeout=20)
+        response = http.opener.open(http.request, timeout=10)
         http.headers = response.info()
         http.headers['Location'] = response.geturl()
         http.status = response.code
