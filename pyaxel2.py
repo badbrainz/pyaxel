@@ -123,7 +123,7 @@ def pyaxel_do(pyaxel):
                     pyaxel.active_threads -= 1
                     continue
                 pyaxellib.conn_set(item, pyaxel.url[0])
-                pyaxel.url.rotate(1)
+                pyaxel.url.rotate(-1)
                 item.retries += 1
                 item.last_transfer = time.time()
                 item.reconnect_count = 0
@@ -219,7 +219,7 @@ def initialize_thread(pyaxel):
     pyaxel.conn[0].conf = pyaxel.conf
 
     for i in xrange(len(pyaxel.url)):
-        url = pyaxel.url.pop()
+        url = pyaxel.url.popleft()
         if not pyaxellib.conn_set(pyaxel.conn[0], url):
             pyaxellib.pyaxel_error(pyaxel, 'Could not parse URL: %s' % url)
             continue
@@ -235,7 +235,7 @@ def initialize_thread(pyaxel):
         if pyaxel.conn[0].supported == 0 and len(pyaxel.url) > 0:
             continue
 
-        pyaxel.url.append(pyaxellib.conn_url(pyaxel.conn[0]))
+        pyaxel.url.appendleft(pyaxellib.conn_url(pyaxel.conn[0]))
         break
 
     if len(pyaxel.url) == 0:
@@ -264,7 +264,7 @@ def initialize_thread(pyaxel):
 def configuration_thread(pyaxel):
     for i, conn in enumerate(pyaxel.conn):
         pyaxellib.conn_set(conn, pyaxel.url[0])
-        pyaxel.url.rotate(1)
+        pyaxel.url.rotate(-1)
         conn.conf = pyaxel.conf
         if i: conn.supported = 1
 
