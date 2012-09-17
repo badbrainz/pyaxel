@@ -56,22 +56,20 @@ def pyaxel_new(conf, url):
 
     pyaxellib.pyaxel_message(pyaxel, 'Initializing download.')
 
-    pyaxel.active_threads = 1
     pyaxel.threads = threadpool.ThreadPool(1)
     pyaxel.threads.addJob(threadpool.JobRequest(initialize_thread, [pyaxel]))
+    pyaxel.active_threads = 1
 
     return pyaxel
 
 def pyaxel_stop(pyaxel):
     pyaxellib.pyaxel_message(pyaxel, 'Stopping download: %s' % pyaxel.file_name)
-
     for conn in pyaxel.conn:
         conn.enabled = 0
     pyaxel.ready = 2
 
 def pyaxel_abort(pyaxel):
     pyaxellib.pyaxel_message(pyaxel, 'Aborting download: %s' % pyaxel.file_name)
-
     for conn in pyaxel.conn:
         conn.enabled = 0
     pyaxel.ready = 3
@@ -80,11 +78,11 @@ def pyaxel_do(pyaxel):
     for job in pyaxel.threads.iterProcessedJobs(0):
         state, item = job.result()
         if state == -5: # initialization_thread
-            pyaxellib.pyaxel_message(pyaxel, 'Configuring download.')
+            pyaxellib.pyaxel_message(pyaxel, 'Configuring download')
             pyaxel.threads.addJob(threadpool.JobRequest(configuration_thread, [pyaxel]))
         elif state == -4: # configuration_thread
             pyaxel.active_threads -= 1
-            pyaxellib.pyaxel_message(pyaxel, 'Starting download.')
+            pyaxellib.pyaxel_message(pyaxel, 'Starting download')
         elif state == -3: # initialization_thread
             pyaxel.active_threads -= 1
             pyaxellib.pyaxel_message(pyaxel, 'Cannot access protected directory: %s' % pyaxel.conf.download_path)
@@ -105,8 +103,8 @@ def pyaxel_do(pyaxel):
                     item.reconnect_count = 0
                     item.last_transfer = time.time()
             else:
-                pyaxellib.pyaxel_message(pyaxel, 'Error on connection %d.' % pyaxel.conn.index(item))
-            pyaxellib.pyaxel_message(pyaxel, 'Restarting connection %d.' % pyaxel.conn.index(item))
+                pyaxellib.pyaxel_message(pyaxel, 'Connection %d error' % pyaxel.conn.index(item))
+            pyaxellib.pyaxel_message(pyaxel, 'Connection %d restarted: %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
             item.last_transfer = time.time()
             item.reconnect_count += 1
             threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.threads.addJob, [threadpool.JobRequest(setup_thread, [item])]).start()
@@ -117,7 +115,7 @@ def pyaxel_do(pyaxel):
         elif state == 3:
             if len(pyaxel.url) > 1 and item.http.status != 206:
                 pyaxellib.conn_disconnect(item)
-                pyaxellib.pyaxel_message(pyaxel, 'Connection %d unsupported: %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
+                pyaxellib.pyaxel_message(pyaxel, 'Connection %d error: mirror unsupported %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
                 if item.retries == len(pyaxel.url):
                     pyaxellib.pyaxel_message(pyaxel, 'Connection %d error: tried all mirrors' % pyaxel.conn.index(item))
                     pyaxel.active_threads -= 1
@@ -125,8 +123,8 @@ def pyaxel_do(pyaxel):
                 pyaxellib.conn_set(item, pyaxel.url[0])
                 pyaxel.url.rotate(-1)
                 item.retries += 1
-                item.last_transfer = time.time()
                 item.reconnect_count = 0
+                item.last_transfer = time.time()
                 pyaxel.threads.addJob(threadpool.JobRequest(setup_thread, [item]))
                 continue
             pyaxellib.pyaxel_message(pyaxel, 'Connection %d opened: %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
@@ -134,9 +132,9 @@ def pyaxel_do(pyaxel):
         elif state == 4:
             pyaxel.active_threads -= 1
             if item.current_byte < item.last_byte:
-                pyaxellib.pyaxel_message(pyaxel, 'Connection %d unexpectedly closed.' % pyaxel.conn.index(item))
+                pyaxellib.pyaxel_message(pyaxel, 'Connection %d unexpectedly closed' % pyaxel.conn.index(item))
             else:
-                pyaxellib.pyaxel_message(pyaxel, 'Connection %d finished.' % pyaxel.conn.index(item))
+                pyaxellib.pyaxel_message(pyaxel, 'Connection %d finished' % pyaxel.conn.index(item))
             pyaxellib.conn_disconnect(item)
 
     if pyaxel.ready == 0:
@@ -190,7 +188,6 @@ def pyaxel_close(pyaxel):
         pyaxellib.conn_disconnect(conn)
 
 def pyaxel_save(pyaxel):
-
     if not pyaxel.conn[0].supported:
         return
 
@@ -232,7 +229,7 @@ def initialize_thread(pyaxel):
             pyaxellib.pyaxel_error(pyaxel, pyaxel.conn[0].message)
             continue
 
-        if pyaxel.conn[0].supported == 0 and len(pyaxel.url) > 0:
+        if pyaxel.conn[0].supported != 1 and len(pyaxel.url) > 0:
             continue
 
         pyaxel.url.appendleft(pyaxellib.conn_url(pyaxel.conn[0]))
@@ -257,6 +254,7 @@ def initialize_thread(pyaxel):
         return (-2, pyaxel)
 
     qfile_map[pyaxel.outfd] = Queue.Queue(maxsize=1)
+
     pyaxel.ready = -5
 
     return (-5, pyaxel)
@@ -266,7 +264,6 @@ def configuration_thread(pyaxel):
         pyaxellib.conn_set(conn, pyaxel.url[0])
         pyaxel.url.rotate(-1)
         conn.conf = pyaxel.conf
-        if i: conn.supported = 1
 
     pyaxel.buckets = []
     if pyaxel.conf.max_speed > 0:
@@ -284,14 +281,13 @@ def configuration_thread(pyaxel):
 
     pyaxel.threads.addWorkers(pyaxel.conf.num_connections - 1)
     for conn in pyaxel.conn:
+        conn.delay = 0
+        conn.retries = 1
+        conn.reconnect_count = 0
         conn.start_byte = conn.current_byte
-        if conn.current_byte < conn.last_byte:
-            conn.delay = 0
-            conn.retries = 1
-            conn.reconnect_count = 0
-            pyaxel.active_threads += 1
+        if conn.start_byte < conn.last_byte:
             pyaxel.threads.addJob(threadpool.JobRequest(setup_thread, [conn]))
-            conn.last_transfer = time.time()
+            pyaxel.active_threads += 1
 
     pyaxel.ready = 0
 
