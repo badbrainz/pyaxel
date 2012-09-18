@@ -23,11 +23,11 @@
             <div class="flex-v panel" id="settingspanel">
                 <div class="flex flex-h group">
                     <div class="hbox-2">
-                        <span class="flex">Host:</span>
+                        <span>Host:</span>
                         <input id="host" type="text" placeholder="Enter a valid IP" pattern="(([01]?\d\d?|2[0-4]\d|25[0-5])\.){3}([01]?\d\d?|25[0-5]|2[0-4]\d)">
                     </div>
                     <div class="hbox-2">
-                        <span class="flex">Port:</span>
+                        <span>Port:</span>
                         <input id="port" type="text" pattern="\d+">
                     </div>
                     <div class="flex vbox-1">
@@ -37,32 +37,32 @@
                     </div>
                 </div>
                 <div class="flex flex-v group">
-                    <span class="flex">Download location:</span>
+                    <span>Download location:</span>
                     <input type="text" id="path" class="flex" placeholder="Enter a valid path name" pattern="(?:[a-zA-Z]+:)?\/(?:[\w\-]+\/)*">
                 </div>
                 <div class="flex flex-h group">
                     <div style="width:35%">
-                        <span class="flex">Max splits per download:</span>
+                        <span>Max splits per download:</span>
                         <input id="splits" type="number" size="4" min="1" max="50" value="4" pattern="\d+">
                     </div>
                     <div>
-                        <span class="flex">Max simultaneous downloads:</span>
+                        <span>Max simultaneous downloads:</span>
                         <input id="downloads" type="number" size="4" min="1" max="50" value="2" pattern="\d+">
                     </div>
                 </div>
                 <div class="flex flex-v group">
-                    <span class="flex">Max download rate:</span>
+                    <span>Max speed per download:</span>
                     <div class="flex hbox-1">
                         <input id="speed" type="text" pattern="0|[1-9]\d*"><span style="margin-left:.5em">kB/s</span>
                     </div>
                 </div>
                 <div class="flex flex-h group extra hidden">
                     <div style="width:35%">
-                        <span class="flex">Max reconnect per connection:</span>
+                        <span>Max reconnect per connection:</span>
                         <input id="reconnect" type="text" size="4" value="5" pattern="\d+">
                     </div>
                     <div>
-                        <span class="flex">Reconnect delay:</span>
+                        <span>Reconnect delay:</span>
                         <input id="delay" type="text" size="4" value="20" pattern="\d+">
                     </div>
                 </div>
@@ -76,6 +76,10 @@
                     <label>
                         <input id="output" type="checkbox">
                         <span style="margin-left:.5em">Show progress per chunk</span>
+                    </label>
+                    <label>
+                        <input id="log" type="checkbox">
+                        <span style="margin-left:.5em">Print log messages to console</span>
                     </label>
                 </div>
             </div>
