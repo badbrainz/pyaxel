@@ -67,7 +67,7 @@ function getStatusText(status) {
     case DownloadStatus.ERROR:
         return 'Error';
     case DownloadStatus.CLOSING:
-        return 'Waiting for response';
+        return 'Disconnecting...';
     }
 }
 
