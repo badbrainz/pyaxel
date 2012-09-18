@@ -61,9 +61,11 @@
                         <span>Max reconnect per connection:</span>
                         <input id="reconnect" type="text" size="4" value="5" pattern="\d+">
                     </div>
-                    <div>
+                    <div class="flex flex-v">
                         <span>Reconnect delay:</span>
-                        <input id="delay" type="text" size="4" value="20" pattern="\d+">
+                        <div class="flex hbox-1">
+                            <input id="delay" type="text" size="4" value="20" pattern="\d+"><span style="margin-left:.5em">sec.</span>
+                        </div>
                     </div>
                 </div>
             </div>

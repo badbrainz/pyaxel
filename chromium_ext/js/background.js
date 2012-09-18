@@ -107,37 +107,39 @@ function runCommand(var_args) {
     case 'add':
         if (!args[1])
             return;
-        var expr = matchUrlExpression(args[1]);
-        if (!jobqueue.search('unassigned').some(expr) && !jobqueue.search('active').some(expr)) {
-            if (/\.meta|(?:4|link)$/i.test(parseUri(args[1]).fileName)) {
-                io.http(args[1], function(xml) {
-                    try {
-                        var doc = xml.getElementsByTagNameNS('urn:ietf:params:xml:ns:metalink','metalink');
-                        var file = doc[0].getElementsByTagName('file');
-                        var search = file[0].getElementsByTagName('url');
+        if (/\.meta|(?:4|link)$/i.test(parseUri(args[1]).fileName)) {
+            io.http(args[1], function(xml) {
+                try {
+                    var doc = xml.getElementsByTagNameNS('urn:ietf:params:xml:ns:metalink','metalink');
+                    var files = Array.prototype.slice.call(doc[0].getElementsByTagName('file'));
+                    for (var i = 0; i < files.length; i++) {
+                        var search = Array.prototype.slice.call(files[i].getElementsByTagName('url'));
+                        for (var j = 0; j < search.length; j++)
+                            search[j] = search[j].textContent;
                         var download = jobqueue.new();
-                        download.url = args[1];
-                        download.search = Array.prototype.map.call(search, function(node) {
-                            return node.textContent;
-                        });
-                        download.status = DownloadStatus.QUEUED;
                         download.date = today();
+                        download.url = args[1];
+                        download.search = search;
+                        download.status = DownloadStatus.QUEUED;
                         jobqueue.add(download, args[2]);
                         notifyPorts([download]);
                         if (!args[2])
                             client.establish();
                     }
-                    catch (err) {
-                        console.log(err.stack)
-                    }
-                });
-            }
-            else {
+                }
+                catch (err) {
+                    console.log(err.stack)
+                }
+            });
+        }
+        else {
+            var expr = matchUrlExpression(args[1]);
+            if (!jobqueue.search('unassigned').some(expr) && !jobqueue.search('active').some(expr)) {
                 var download = jobqueue.new();
+                download.date = today();
                 download.url = args[1];
                 download.search = [args[1]];
                 download.status = DownloadStatus.QUEUED;
-                download.date = today();
                 jobqueue.add(download, args[2]);
                 notifyPorts([download]);
                 if (!args[2])
