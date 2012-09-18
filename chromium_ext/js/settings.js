@@ -172,6 +172,7 @@ var events = {
     click: {
         'abouttab': activate_tab,
         'echo': check_server,
+        'log': save_input,
         'manualtab': activate_tab,
         'options': [save_input, activate_advanced_options],
         'output': save_input,
@@ -185,18 +186,19 @@ var settings = {
     delay:null,
     echo:null,
     hostname:null,
-    path:null,
+    log:null,
     maxsplits:null,
     maxdownloads:null,
     maxreconns:null,
+    noteid:-1,
     options:null,
+    panels:null,
+    path:null,
     portnum:null,
     speed_inp:null,
-    version:null,
     tabbar:null,
-    panels:null,
     tabs:null,
-    noteid:-1,
+    version:null,
 
     handleEvent: function(e) {
         if (e.type in events) {
@@ -216,6 +218,7 @@ var settings = {
                 delay = d.querySelector('#delay');
                 echo = d.querySelector('#echo');
                 hostname = d.querySelector('#host');
+                log = d.querySelector('#log');
                 maxsplits = d.querySelector('#splits');
                 maxdownloads = d.querySelector('#downloads');
                 maxreconns = d.querySelector('#reconnect');
@@ -239,6 +242,7 @@ var settings = {
                 background = chrome.extension.getBackgroundPage();
                 delay.value = background.getPreference('prefs.delay');
                 hostname.value = background.getPreference('prefs.host');
+                log.checked = +background.getPreference('prefs.log');
                 maxsplits.value = background.getPreference('prefs.splits');
                 maxdownloads.value = background.getPreference('prefs.downloads');
                 maxreconns.value = background.getPreference('prefs.reconnect');
