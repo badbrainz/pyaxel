@@ -406,6 +406,10 @@ settings.connect('update', function(event) {
             client.serverAddress = formatString('ws://{0}:{1}',
                 settings.getItem('prefs.host'), +event.newVal);
             break;
+
+        case 'log':
+            activity_log = +event.newVal;
+            break;
         }
     }
 });
