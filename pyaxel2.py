@@ -50,6 +50,7 @@ def pyaxel_new(conf, url):
         pyaxel.conf.download_path += os.path.sep
 
     if type(url) is list:
+        pyaxel.conf.num_connections = min(pyaxel.conf.num_connections, len(url))
         pyaxel.url = Queue.deque(url)
     else:
         pyaxel.url = Queue.deque([url])
