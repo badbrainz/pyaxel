@@ -5,17 +5,19 @@ var job_map = {/* [job.id] = connection.id */};
 var settings = new Settings(window.localStorage, {
     'data.paversion': '1.1.0',
     'data.version': 0,
+    'prefs.delay': 20,
     'prefs.downloads': 2,
     'prefs.host': '127.0.0.1',
+    'prefs.log': 0,
+    'prefs.options': 0,
     'prefs.output': 1,
     'prefs.path': '',
     'prefs.port': 8002,
-    'prefs.options': 0,
     'prefs.reconnect': 5,
-    'prefs.delay': 20,
     'prefs.speed': 0,
     'prefs.splits': 4
 });
+var activity_log;
 
 function init() {
     if (!window.localStorage['data.seenInstall']) {
@@ -72,6 +74,8 @@ function init() {
         }
     });
     chrome.extension.onConnect.addListener(addPort);
+
+    activity_log = settings.getObject('prefs.log');
 }
 
 function notifyPorts(msg) {
@@ -309,7 +313,7 @@ function message_handler(connection, response) {
         break;
     }
 
-    download.log = response.log;
+    download.log = activity_log && response.log;
 
     notifyPorts([download]);
 }
