@@ -92,6 +92,9 @@ def pyaxel_do(pyaxel):
             pyaxellib.pyaxel_message(pyaxel, 'Could not setup pyaxel')
         elif state == 1:
             pyaxellib.conn_disconnect(item)
+            if pyaxel.ready != 0:
+                pyaxel.active_threads -= 1
+                continue
             if item.state == 0 and item.current_byte < item.last_byte:
                 if item.reconnect_count == pyaxel.conf.max_reconnect:
                     if item.retries == len(pyaxel.url):
@@ -114,6 +117,10 @@ def pyaxel_do(pyaxel):
             pyaxellib.pyaxel_message(pyaxel, 'Write error!')
             pyaxellib.conn_disconnect(item)
         elif state == 3:
+            if pyaxel.ready != 0:
+                pyaxel.active_threads -= 1
+                pyaxellib.conn_disconnect(item)
+                continue
             if len(pyaxel.url) > 1 and item.http.status != 206:
                 pyaxellib.conn_disconnect(item)
                 pyaxellib.pyaxel_message(pyaxel, 'Connection %d error: mirror unsupported %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
