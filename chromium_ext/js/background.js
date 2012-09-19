@@ -138,7 +138,7 @@ function runCommand(var_args) {
                 var download = jobqueue.new();
                 download.date = today();
                 download.url = args[1];
-                download.search = [args[1]];
+                download.search = args[1];
                 download.status = DownloadStatus.QUEUED;
                 jobqueue.add(download, args[2]);
                 notifyPorts([download]);
