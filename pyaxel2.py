@@ -106,15 +106,13 @@ def pyaxel_do(pyaxel):
                     item.retries += 1
                     item.reconnect_count = 0
                     item.last_transfer = time.time()
-            else:
-                pyaxellib.pyaxel_message(pyaxel, 'Connection %d error' % pyaxel.conn.index(item))
-            pyaxellib.pyaxel_message(pyaxel, 'Connection %d restarted: %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
+            pyaxellib.pyaxel_message(pyaxel, 'Connection %d error' % pyaxel.conn.index(item))
             item.last_transfer = time.time()
             item.reconnect_count += 1
             threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.threads.addJob, [threadpool.JobRequest(setup_thread, [item])]).start()
         elif state == 2:
+            pyaxellib.pyaxel_message(pyaxel, 'Connection %d error: local file error' % pyaxel.conn.index(item))
             pyaxel.active_threads -= 1
-            pyaxellib.pyaxel_message(pyaxel, 'Write error!')
             pyaxellib.conn_disconnect(item)
         elif state == 3:
             if pyaxel.ready != 0:
@@ -139,11 +137,11 @@ def pyaxel_do(pyaxel):
             pyaxel.threads.addJob(threadpool.JobRequest(download_thread, [pyaxel, item]))
         elif state == 4:
             pyaxel.active_threads -= 1
+            pyaxellib.conn_disconnect(item)
             if item.current_byte < item.last_byte:
-                pyaxellib.pyaxel_message(pyaxel, 'Connection %d unexpectedly closed' % pyaxel.conn.index(item))
+                pyaxellib.pyaxel_message(pyaxel, 'Connection %d interrupted' % pyaxel.conn.index(item))
             else:
                 pyaxellib.pyaxel_message(pyaxel, 'Connection %d finished' % pyaxel.conn.index(item))
-            pyaxellib.conn_disconnect(item)
 
     if pyaxel.ready == 0:
         if time.time() > pyaxel.next_state:
