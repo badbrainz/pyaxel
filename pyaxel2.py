@@ -183,7 +183,7 @@ def pyaxel_close(pyaxel):
     for conn in pyaxel.conn:
         conn.enabled = 0
 
-    if pyaxel.ready in (1, 3):
+    if pyaxel.ready in (1, 3, -6, -7):
         if os.path.exists('%s.st' % pyaxel.file_name):
             os.remove('%s.st' % pyaxel.file_name)
         if pyaxel.ready == 3:
