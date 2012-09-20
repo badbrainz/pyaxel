@@ -125,7 +125,6 @@ function runCommand(cmd, var_args) {
                         for (var j = 0; j < download.search.length; j++)
                             download.search[j] = download.search[j].textContent;
 
-                        download.checksum = '';
                         var hash = Array.prototype.slice.call(files[i].getElementsByTagNameNS(namespace,'hash'));
                         for (var j = 0; j < hash.length; j++) {
                             if (hash[j].attributes.getNamedItem('type').value === 'md5') {
