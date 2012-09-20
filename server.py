@@ -157,9 +157,8 @@ class channel_c:
             if self.axel.ready == -5:
                 msg = {
                     'event': OK,
-                    'url': self.axel.url[0], # NOTE why whould the client care?
                     'name': self.axel.file_name,
-                    'type': 'test',
+                    'type': self.axel.file_type,
                     'size': self.axel.size,
                     'log': pyaxellib2.pyaxel_print(self.axel)
                 }
