@@ -74,6 +74,7 @@ function init() {
         }
     });
     chrome.extension.onConnect.addListener(addPort);
+//    chrome.extension.onConnectExternal.addListener(addPort);
 
     activity_log = settings.getObject('prefs.log');
 }
@@ -100,17 +101,23 @@ function removePort(port) {
     delete ports[port.name || port.sender.id];
 }
 
-function runCommand(var_args) {
-    var args = arguments;
-    switch (args[0]) {
+function runCommand(cmd, var_args) {
+    switch (arguments[0]) {
     case 'add':
-        if (!args[1])
+        if (!arguments[1])
             return;
-        if (/\.meta|(?:4|link)$/i.test(parseUri(args[1]).fileName)) {
-            io.http(args[1], function(xml) {
+
+        var expr = matchPropertyExpression('name', arguments[1]);
+        if (!jobqueue.search('unassigned').some(expr) && !jobqueue.search('active').some(expr))
+            return;
+
+        if (/\.meta|(?:4|link)$/i.test(parseUri(arguments[1]).fileName)) {
+            var args = arguments;
+            io.http(arguments[1], function(xml) {
                 try {
-                    var doc = xml.getElementsByTagNameNS('urn:ietf:params:xml:ns:metalink','metalink');
-                    var files = Array.prototype.slice.call(doc[0].getElementsByTagName('file'));
+                    var namespace = 'urn:ietf:params:xml:ns:metalink';
+                    var doc = xml.getElementsByTagNameNS(namespace,'metalink');
+                    var files = Array.prototype.slice.call(doc[0].getElementsByTagNameNS(namespace,'file'));
                     for (var i = 0; i < files.length; i++) {
                         var download = jobqueue.new();
 
@@ -142,42 +149,39 @@ function runCommand(var_args) {
             });
         }
         else {
-            var expr = matchUrlExpression(args[1]);
-            if (!jobqueue.search('unassigned').some(expr) && !jobqueue.search('active').some(expr)) {
-                var download = jobqueue.new();
-                download.date = today();
-                download.url = args[1];
-                download.search = [args[1]];
-                download.status = DownloadStatus.QUEUED;
-                jobqueue.add(download, args[2]);
-                notifyPorts([download]);
-                if (!args[2])
-                    client.establish();
-            }
+            var download = jobqueue.new();
+            download.date = today();
+            download.url = arguments[1];
+            download.search = arguments[1];
+            download.status = DownloadStatus.QUEUED;
+            jobqueue.add(download, arguments[2]);
+            notifyPorts([download]);
+            if (!arguments[2])
+                client.establish();
         }
         break;
 
     case 'cancel':
-        client.send(job_map[args[1]], {
+        client.send(job_map[arguments[1]], {
             'cmd': ServerCommand.ABORT
         });
         break;
 
     case 'pause':
-        client.send(job_map[args[1]], {
+        client.send(job_map[arguments[1]], {
             'cmd': ServerCommand.STOP
         });
         break;
 
     case 'remove':
-        jobqueue.remove(args[1]);
+        jobqueue.remove(arguments[1]);
         notifyPorts(jobqueue.search('all'));
         break;
 
     case 'resume':
-        var download = jobqueue.search(args[1]);
+        var download = jobqueue.search(arguments[1]);
         if (download)
-            client.send(job_map[args[1]], {
+            client.send(job_map[arguments[1]], {
                 'cmd': ServerCommand.START,
                 'arg': {
                     'url': download.search,
@@ -187,8 +191,8 @@ function runCommand(var_args) {
         break;
 
     case 'retry':
-        var download = jobqueue.search('completed', args[1]) ||
-            jobqueue.search('unassigned', args[1]);
+        var download = jobqueue.search('completed', arguments[1]) ||
+            jobqueue.search('unassigned', arguments[1]);
         if (download) {
             download.status = DownloadStatus.QUEUED;
             download.date = today();
@@ -208,11 +212,11 @@ function runCommand(var_args) {
         break;
 
     case 'search':
-        return jobqueue.search(args[1]);
+        return jobqueue.search(arguments[1]);
         break;
 
     default:
-        console.error('unknown command \'%s\'', args[0]);
+        console.error('unknown command \'%s\'', arguments[0]);
         break;
     }
 }
@@ -252,9 +256,9 @@ function message_handler(connection, response) {
 
     case MessageEvent.OK:
         download.status = DownloadStatus.INITIALIZING;
-        download.fname = response.name;
-        download.fsize = response.size;
-        download.ftype = response.type;
+        download.name = response.name;
+        download.size = response.size;
+        download.type = response.type;
         download.chunks = response.chunks;
         download.progress = response.progress;
         jobqueue.jobStarted(download);
@@ -395,14 +399,13 @@ function error_handler(connection) {
 }
 
 function displayPage(file) {
-    var url = chrome.extension.getURL(file);
     chrome.tabs.query({
         'windowId': chrome.windows.WINDOW_ID_CURRENT,
-        'url': url
+        'url': chrome.extension.getURL(file)
     }, function(tabs) {
         if (tabs.length == 0) chrome.tabs.create({
             'active': true,
-            'url': url
+            'url': chrome.extension.getURL(file)
         });
         else chrome.tabs.update(tabs[0].id, {
             'active': true
@@ -427,12 +430,6 @@ function getDownloadConfig() {
         'max_reconnect': settings.getObject('prefs.reconnect'),
         'num_connections': settings.getObject('prefs.splits')
     };
-}
-
-function matchUrlExpression(url) {
-    return function(download) {
-        return download.url === url;
-    }
 }
 
 
