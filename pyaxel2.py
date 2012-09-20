@@ -254,6 +254,10 @@ def initialize_thread(pyaxel):
     pyaxel.file_name = pyaxellib.http_decode(pyaxel.file_name) or pyaxel.conf.default_filename
     pyaxel.file_name = pyaxel.conf.download_path + pyaxel.file_name
 
+    pyaxel.file_type = pyaxellib.http_header(pyaxel.conn[0].http, 'content-tpe')
+    if not pyaxel.file_type:
+        pyaxel.file_type = 'application/octet-stream'
+
     if not pyaxellib.pyaxel_open(pyaxel):
         pyaxellib.pyaxel_error(pyaxel, pyaxel.last_error)
         pyaxel.ready = -2
