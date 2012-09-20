@@ -170,7 +170,7 @@ class channel_c:
                     msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
                 self.websocket.handle_response(deflate_msg(msg))
 
-            elif self.axel.ready == 0:
+            elif self.axel.ready == 0 or self.axel.ready == 1:
                 msg = {
                     'event': PROCESSING,
                     'rate': format_size(self.axel.bytes_per_second),
