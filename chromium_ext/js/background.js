@@ -359,8 +359,23 @@ function message_handler(connection, response) {
     case MessageEvent.ERROR:
         connection.send({'cmd': ServerCommand.ABORT});
     case MessageEvent.INVALID:
-        jobqueue.jobFailed(download);
         download.status = DownloadStatus.ERROR;
+        jobqueue.jobFailed(download);
+        var job = jobqueue.get();
+        if (!job)
+            connection.send({'cmd': ServerCommand.QUIT});
+        else {
+            delete job_map[download.id];
+            job_map[job.id] = connection.id;
+            connection.payload = job;
+            connection.send({
+                'cmd': ServerCommand.START,
+                'arg': {
+                    'url': job.search,
+                    'conf': getDownloadConfig()
+                }
+            });
+        }
         break;
     }
 
