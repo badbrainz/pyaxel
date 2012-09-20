@@ -108,7 +108,7 @@ function runCommand(cmd, var_args) {
             return;
 
         var expr = matchPropertyExpression('name', arguments[1]);
-        if (!jobqueue.search('unassigned').some(expr) && !jobqueue.search('active').some(expr))
+        if (jobqueue.search('unassigned').some(expr) && jobqueue.search('active').some(expr))
             return;
 
         if (/\.meta|(?:4|link)$/i.test(parseUri(arguments[1]).fileName)) {
