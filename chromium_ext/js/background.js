@@ -19,23 +19,16 @@ var settings = new Settings(window.localStorage, {
 });
 var activity_log;
 
-function init() {
+function init_core() {
     if (!window.localStorage['data.seenInstall']) {
         window.localStorage['data.seenInstall'] = true;
         window.localStorage['data.lastUpdate'] = Date.now();
     }
 
-    var request = new XMLHttpRequest();
-    request.open('GET', chrome.extension.getURL('manifest.json'), true);
-    request.onreadystatechange = function() {
-        if (request.readyState == XMLHttpRequest.DONE) {
-            if (request.status == 200) {
-                var manifest = JSON.parse(request.responseText);
-                window.localStorage['data.version'] = manifest.version;
-            }
-        }
-    }
-    request.send();
+    io.http(chrome.extension.getURL('manifest.json'), function(response) {
+        var manifest = JSON.parse(response);
+        window.localStorage['data.version'] = manifest.version;
+    }, 'text');
 
 //    history.init();
 
@@ -73,18 +66,18 @@ function init() {
             runCommand('add', info.linkUrl, true);
         }
     });
-    chrome.extension.onConnect.addListener(addPort);
-//    chrome.extension.onConnectExternal.addListener(addPort);
+    chrome.extension.onConnect.addListener(add_port);
+//    chrome.extension.onConnectExternal.addListener(add_port);
 
     activity_log = settings.getObject('prefs.log');
 }
 
-function notifyPorts(msg) {
+function notify_ports(msg) {
     for (var port in ports)
         ports[port].postMessage(msg);
 };
 
-function addPort(port) {
+function add_port(port) {
     var name = port.name || port.sender.id;
     if (ports[name])
         ports[name].disconnect();
@@ -94,10 +87,10 @@ function addPort(port) {
         if (result)
             port.postMessage(result);
     });
-    port.onDisconnect.addListener(removePort);
+    port.onDisconnect.addListener(remove_port);
 }
 
-function removePort(port) {
+function remove_port(port) {
     delete ports[port.name || port.sender.id];
 }
 
@@ -111,7 +104,7 @@ function runCommand(cmd, var_args) {
         if (jobqueue.search('unassigned').some(expr) && jobqueue.search('active').some(expr))
             return;
 
-        if (/\.meta|(?:4|link)$/i.test(parseUri(arguments[1]).fileName)) {
+        if (/\.meta4$/i.test(parseUri(arguments[1]).fileName)) {
             var args = arguments;
             io.http(arguments[1], function(xml) {
                 try {
@@ -125,7 +118,6 @@ function runCommand(cmd, var_args) {
                         for (var j = 0; j < download.search.length; j++)
                             download.search[j] = download.search[j].textContent;
 
-                        download.checksum = '';
                         var hash = Array.prototype.slice.call(files[i].getElementsByTagNameNS(namespace,'hash'));
                         for (var j = 0; j < hash.length; j++) {
                             if (hash[j].attributes.getNamedItem('type').value === 'md5') {
@@ -138,7 +130,7 @@ function runCommand(cmd, var_args) {
                         download.url = args[1];
                         download.status = DownloadStatus.QUEUED;
                         jobqueue.add(download, args[2]);
-                        notifyPorts([download]);
+                        notify_ports([download]);
                         if (!args[2])
                             client.establish();
                     }
@@ -155,7 +147,7 @@ function runCommand(cmd, var_args) {
             download.search = arguments[1];
             download.status = DownloadStatus.QUEUED;
             jobqueue.add(download, arguments[2]);
-            notifyPorts([download]);
+            notify_ports([download]);
             if (!arguments[2])
                 client.establish();
         }
@@ -175,7 +167,7 @@ function runCommand(cmd, var_args) {
 
     case 'remove':
         jobqueue.remove(arguments[1]);
-        notifyPorts(jobqueue.search('all'));
+        notify_ports(jobqueue.search('all'));
         break;
 
     case 'resume':
@@ -200,7 +192,7 @@ function runCommand(cmd, var_args) {
             delete download.chunks;
             delete download.progress;
             jobqueue.retry(download.id);
-            notifyPorts([download]);
+            notify_ports([download]);
             if (jobqueue.size())
                 client.establish();
         }
@@ -208,7 +200,7 @@ function runCommand(cmd, var_args) {
 
     case 'purge':
         jobqueue.purge();
-        notifyPorts(jobqueue.search('all'));
+        notify_ports(jobqueue.search('all'));
         break;
 
     case 'search':
@@ -292,62 +284,20 @@ function message_handler(connection, response) {
         else {
             download.status = DownloadStatus.COMPLETE;
             jobqueue.jobCompleted(download);
-            var job = jobqueue.get();
-            if (!job)
-                connection.send({'cmd': ServerCommand.QUIT});
-            else {
-                delete job_map[download.id];
-                job_map[job.id] = connection.id;
-                connection.payload = job;
-                connection.send({
-                    'cmd': ServerCommand.START,
-                    'arg': {
-                        'url': job.search,
-                        'conf': getDownloadConfig()
-                    }
-                });
-            }
+            employ_connection(connection);
         }
         break;
 
     case MessageEvent.VERIFIED:
         download.status = DownloadStatus.COMPLETE;
         jobqueue.jobCompleted(download);
-        var job = jobqueue.get();
-        if (!job)
-            connection.send({'cmd': ServerCommand.QUIT});
-        else {
-            delete job_map[download.id];
-            job_map[job.id] = connection.id;
-            connection.payload = job;
-            connection.send({
-                'cmd': ServerCommand.START,
-                'arg': {
-                    'url': job.search,
-                    'conf': getDownloadConfig()
-                }
-            });
-        }
+        employ_connection(connection);
         break;
 
     case MessageEvent.INCOMPLETE:
         download.status = DownloadStatus.CANCELLED;
         jobqueue.jobStopped(download);
-        var job = jobqueue.get();
-        if (!job)
-            connection.send({'cmd': ServerCommand.QUIT});
-        else {
-            delete job_map[download.id];
-            job_map[job.id] = connection.id;
-            connection.payload = job;
-            connection.send({
-                'cmd': ServerCommand.START,
-                'arg': {
-                    'url': job.search,
-                    'conf': getDownloadConfig()
-                }
-            });
-        }
+        employ_connection(connection);
         break;
 
     case MessageEvent.RESERVED:
@@ -361,27 +311,13 @@ function message_handler(connection, response) {
     case MessageEvent.INVALID:
         download.status = DownloadStatus.ERROR;
         jobqueue.jobFailed(download);
-        var job = jobqueue.get();
-        if (!job)
-            connection.send({'cmd': ServerCommand.QUIT});
-        else {
-            delete job_map[download.id];
-            job_map[job.id] = connection.id;
-            connection.payload = job;
-            connection.send({
-                'cmd': ServerCommand.START,
-                'arg': {
-                    'url': job.search,
-                    'conf': getDownloadConfig()
-                }
-            });
-        }
+        employ_connection(connection);
         break;
     }
 
     download.log = activity_log && response.log;
 
-    notifyPorts([download]);
+    notify_ports([download]);
 }
 
 function disconnect_handler(connection) {
@@ -392,10 +328,10 @@ function disconnect_handler(connection) {
         delete connection.payload.log;
         if (connection.payload.status == DownloadStatus.PAUSED)
             connection.payload.status = DownloadStatus.CANCELLED;
-        notifyPorts([connection.payload]);
+        notify_ports([connection.payload]);
     }
     else
-        notifyPorts(jobqueue.search('all'));
+        notify_ports(jobqueue.search('all'));
 
     if (jobqueue.size())
         client.establish();
@@ -407,10 +343,28 @@ function error_handler(connection) {
     if (connection.payload) {
         delete job_map[connection.payload.id];
         delete connection.payload.log;
-        notifyPorts([connection.payload]);
+        notify_ports([connection.payload]);
     }
     else
-        notifyPorts(jobqueue.search('all'));
+        notify_ports(jobqueue.search('all'));
+}
+
+function employ_connection(connection) {
+    var job = jobqueue.get();
+    if (!job)
+        connection.send({'cmd': ServerCommand.QUIT});
+    else {
+        delete job_map[connection.payload.id];
+        job_map[job.id] = connection.id;
+        connection.payload = job;
+        connection.send({
+            'cmd': ServerCommand.START,
+            'arg': {
+                'url': job.search,
+                'conf': getDownloadConfig()
+            }
+        });
+    }
 }
 
 function displayPage(file) {
@@ -474,21 +428,10 @@ settings.connect('update', function(event) {
 });
 
 (function() {
-    if (/win/i.test(window.navigator.platform)) {
-        if (!window.localStorage['data.seenInstall']) {
-            window.localStorage['data.seenInstall'] = true;
-            chrome.tabs.create({
-                'url': chrome.extension.getURL('alert.html'),
-                'active': true
-            });
-        }
-        return;
-    }
-
 	if (/loaded|complete/i.test(document.readyState))
-		init();
+		init_core();
 	else if (/loading/i.test(document.readyState))
-		document.addEventListener('DOMContentLoaded', init, false);
+		document.addEventListener('DOMContentLoaded', init_core, false);
 	else
-		window.setTimeout(init, 0);
+		window.setTimeout(init_core, 0);
 })();
