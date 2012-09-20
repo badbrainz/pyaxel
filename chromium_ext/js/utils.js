@@ -9,7 +9,8 @@ var DownloadStatus = {
     UNDEFINED: 6,
     CONNECTING: 7,
     ERROR: 8,
-    CLOSING: 9
+    CLOSING: 9,
+    VERIFYING: 10
 };
 
 /* serv commands */
@@ -18,7 +19,8 @@ var ServerCommand = {
     START: 1,
     STOP: 2,
     ABORT: 3,
-    QUIT: 4
+    QUIT: 4,
+    CHECK: 5
 };
 
 /* serv reply codes */
@@ -27,14 +29,16 @@ var MessageEvent = {
     ACK: 1,
     OK: 2,
     PROCESSING: 3,
-    END: 4,
+    COMPLETED: 4,
     CLOSING: 5,
     INCOMPLETE: 6,
     STOPPED: 7,
     INVALID: 8,
     BAD_REQUEST: 9,
     ERROR: 10,
-    UNDEFINED: 11
+    UNDEFINED: 11,
+    RESERVED: 12,
+    VERIFIED: 13
 };
 
 /* socket readyState codes */
@@ -112,6 +116,12 @@ function paramedFunction(args) {
     var args = Array.prototype.slice.call(arguments, 2);
     return function() {
         callback.apply(scope, args);
+    }
+}
+
+function matchPropertyExpression(key, val) {
+    return function(obj) {
+        return obj[key] === val;
     }
 }
 
