@@ -84,11 +84,10 @@ function notifyPorts(msg) {
 };
 
 function addPort(port) {
-    if (!port.name)
-        return;
-    if (ports[port.name])
-        ports[port.name].disconnect();
-    ports[port.name] = port;
+    var name = port.name || port.sender.id;
+    if (ports[name])
+        ports[name].disconnect();
+    ports[name] = port;
     port.onMessage.addListener(function(list_args, portImpl) {
         var result = runCommand.apply(null, list_args);
         if (result)
@@ -98,7 +97,7 @@ function addPort(port) {
 }
 
 function removePort(port) {
-    delete ports[port.name];
+    delete ports[port.name || port.sender.id];
 }
 
 function runCommand(var_args) {
