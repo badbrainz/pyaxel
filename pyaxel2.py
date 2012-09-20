@@ -166,7 +166,7 @@ def pyaxel_do(pyaxel):
         pyaxel.finish_time = pyaxel.start_time + (pyaxel.size - pyaxel.bytes_start) / (pyaxel.bytes_per_second + 1)
 
         if pyaxel.size and pyaxel.bytes_done == pyaxel.size:
-            pyaxellib.pyaxel_message(pyaxel, 'Download complete: %s' % pyaxel.file_name)
+            pyaxellib.pyaxel_message(pyaxel, 'Download complete')
             pyaxel.ready = 1
 
 def pyaxel_seek(pyaxel, offset):
