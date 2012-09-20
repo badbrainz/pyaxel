@@ -473,17 +473,6 @@ settings.connect('update', function(event) {
 });
 
 (function() {
-    if (/win/i.test(window.navigator.platform)) {
-        if (!window.localStorage['data.seenInstall']) {
-            window.localStorage['data.seenInstall'] = true;
-            chrome.tabs.create({
-                'url': chrome.extension.getURL('alert.html'),
-                'active': true
-            });
-        }
-        return;
-    }
-
 	if (/loaded|complete/i.test(document.readyState))
 		init();
 	else if (/loading/i.test(document.readyState))
