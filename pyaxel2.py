@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import hashlib
 import Queue
 import os
 import socket
@@ -78,7 +79,13 @@ def pyaxel_abort(pyaxel):
 def pyaxel_do(pyaxel):
     for job in pyaxel.threads.iterProcessedJobs(0):
         state, item = job.result()
-        if state == -5: # initialization_thread
+        if state == -7:
+            pyaxel.active_threads -= 1
+            pyaxellib.pyaxel_message(pyaxel, 'Failed integrity check')
+        elif state == -6:
+            pyaxel.active_threads -= 1
+            pyaxellib.pyaxel_message(pyaxel, 'Integrity check successful')
+        elif state == -5: # initialization_thread
             pyaxellib.pyaxel_message(pyaxel, 'Configuring download')
             pyaxel.threads.addJob(threadpool.JobRequest(configuration_thread, [pyaxel]))
         elif state == -4: # configuration_thread
@@ -209,6 +216,12 @@ def pyaxel_save(pyaxel):
     except IOError:
         pass
 
+def pyaxel_checksum(pyaxel, checksum, sum_type):
+    pyaxel.active_threads += 1
+    pyaxel.ready = 100
+    pyaxel.threads.addJob(threadpool.JobRequest(validate_thread, [pyaxel, checksum, sum_type]))
+    pyaxellib.pyaxel_message(pyaxel, 'Verifying checksum')
+
 def pyaxel_print(pyaxel):
     messages = '\n'.join(pyaxel.message)
     del pyaxel.message[:]
@@ -338,6 +351,25 @@ def setup_thread(conn):
     pyaxellib.conn_disconnect(conn)
     conn.state = 0
     return (1, conn)
+
+def validate_thread(pyaxel, checksum, sum_type):
+    if hasattr(hashlib, sum_type):
+        algo = hashlib.new(sum_type)
+
+        with open(pyaxel.file_name, 'rb') as fd:
+            fd.seek(0)
+            while True:
+                data = fd.read(2**20)
+                if not data:
+                    break
+                algo.update(data)
+
+        if algo.hexdigest() == checksum:
+            pyaxel.ready = -6
+            return (-6, pyaxel)
+
+    pyaxel.ready = -7
+    return (-7, pyaxel)
 
 def main(argv=None):
     import stat
