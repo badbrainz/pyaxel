@@ -68,6 +68,8 @@ function getStatusText(status) {
         return 'Error';
     case DownloadStatus.CLOSING:
         return 'Disconnecting...';
+    case DownloadStatus.VERIFYING:
+        return 'Verifying checksum';
     }
 }
 
@@ -150,8 +152,8 @@ function Panel(state) {
     labelsNode.appendChild(controlsNode);
 
     var title = createElementWithClassName('div', 'title');
-    this.labels.name = createElementWithClassName('div', 'name', state.fname);
-    this.labels.size = createElementWithClassName('div', 'size dyninfo', formatBytes(state.fsize));
+    this.labels.name = createElementWithClassName('div', 'name', state.name);
+    this.labels.size = createElementWithClassName('div', 'size dyninfo', formatBytes(state.size));
     this.labels.rate = createElementWithClassName('div', 'rate dyninfo', state.speed);
     this.labels.percent = createElementWithClassName('div', 'percent dyninfo', state.percent);
     title.appendChild(this.labels.percent);
@@ -197,7 +199,8 @@ Panel.prototype.update = function(state) {
 
     var active = status === DownloadStatus.IN_PROGRESS;
     var idle = status === DownloadStatus.PAUSED;
-    var ending = status === DownloadStatus.CLOSING;
+    var waiting = status === DownloadStatus.CONNECTING ||
+        status === DownloadStatus.CLOSING;
     var done = status === DownloadStatus.COMPLETE;
     var inactive = status === DownloadStatus.QUEUED ||
         status === DownloadStatus.CANCELLED || status === DownloadStatus.ERROR;
@@ -207,9 +210,9 @@ Panel.prototype.update = function(state) {
 
     if (prev_status !== status) {
         this.adjustDocPosition(status);
-        labels.size.innerHTML = formatBytes(state.fsize);
+        labels.size.innerHTML = formatBytes(state.size);
         labels.status.innerHTML = getStatusText(status);
-        labels.name.innerHTML = state.fname || '';
+        labels.name.innerHTML = state.name || '';
     }
 
     if (idle || active) {
@@ -219,7 +222,7 @@ Panel.prototype.update = function(state) {
         canvas.clearRect(0, 0, pie.width, pie.height);
         canvas.beginPath();
         canvas.moveTo(pie.centerX, pie.centerY);
-        var percent = state.fsize ? Math.floor(sum(state.progress) * 100 / state.fsize) : 0;
+        var percent = state.size ? Math.floor(sum(state.progress) * 100 / state.size) : 0;
         canvas.arc(pie.centerX, pie.centerY, pie.radius, pie.base, pie.base + pie.base2 * percent, false);
         canvas.lineTo(pie.centerX, pie.centerY);
         canvas.fill();
@@ -230,7 +233,7 @@ Panel.prototype.update = function(state) {
         show(labels.rate, active);
         show(labels.size, true);
     }
-    else if (inactive || done || ending) {
+    else if (inactive || done || waiting) {
         this.showindicators(false);
         labels.percent.innerHTML = '';
         labels.rate.innerHTML = '';
