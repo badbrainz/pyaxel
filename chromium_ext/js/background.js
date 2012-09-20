@@ -112,13 +112,23 @@ function runCommand(var_args) {
                     var doc = xml.getElementsByTagNameNS('urn:ietf:params:xml:ns:metalink','metalink');
                     var files = Array.prototype.slice.call(doc[0].getElementsByTagName('file'));
                     for (var i = 0; i < files.length; i++) {
-                        var search = Array.prototype.slice.call(files[i].getElementsByTagName('url'));
-                        for (var j = 0; j < search.length; j++)
-                            search[j] = search[j].textContent;
                         var download = jobqueue.new();
+
+                        download.search = Array.prototype.slice.call(files[i].getElementsByTagNameNS(namespace,'url'));
+                        for (var j = 0; j < download.search.length; j++)
+                            download.search[j] = download.search[j].textContent;
+
+                        download.checksum = '';
+                        var hash = Array.prototype.slice.call(files[i].getElementsByTagNameNS(namespace,'hash'));
+                        for (var j = 0; j < hash.length; j++) {
+                            if (hash[j].attributes.getNamedItem('type').value === 'md5') {
+                                download.checksum = hash[j].textContent;
+                                break;
+                            }
+                        }
+
                         download.date = today();
                         download.url = args[1];
-                        download.search = search;
                         download.status = DownloadStatus.QUEUED;
                         jobqueue.add(download, args[2]);
                         notifyPorts([download]);
