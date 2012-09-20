@@ -185,7 +185,7 @@ class channel_c:
             return
 
         if self.axel.ready == 1:
-            self.websocket.handle_response(deflate_msg({'event':END,
+            self.websocket.handle_response(deflate_msg({'event':COMPLETED,
                 'log':pyaxellib2.pyaxel_print(self.axel)}))
         elif self.axel.ready == 2:
             self.websocket.handle_response(deflate_msg({"event":STOPPED,
