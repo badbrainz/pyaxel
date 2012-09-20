@@ -275,7 +275,38 @@ function message_handler(connection, response) {
         download.status = DownloadStatus.CLOSING;
         break;
 
-    case MessageEvent.END:
+    case MessageEvent.COMPLETED:
+        if ('checksum' in download) {
+            connection.send({
+                'cmd': ServerCommand.CHECK,
+                'arg': {
+                    'type': 'md5',
+                    'checksum': download.checksum
+                }
+            });
+        }
+        else {
+            download.status = DownloadStatus.COMPLETE;
+            jobqueue.jobCompleted(download);
+            var job = jobqueue.get();
+            if (!job)
+                connection.send({'cmd': ServerCommand.QUIT});
+            else {
+                delete job_map[download.id];
+                job_map[job.id] = connection.id;
+                connection.payload = job;
+                connection.send({
+                    'cmd': ServerCommand.START,
+                    'arg': {
+                        'url': job.search,
+                        'conf': getDownloadConfig()
+                    }
+                });
+            }
+        }
+        break;
+
+    case MessageEvent.VERIFIED:
         download.status = DownloadStatus.COMPLETE;
         jobqueue.jobCompleted(download);
         var job = jobqueue.get();
@@ -315,12 +346,17 @@ function message_handler(connection, response) {
         }
         break;
 
+    case MessageEvent.RESERVED:
+        download.status = DownloadStatus.VERIFYING;
+        break;
+
     case MessageEvent.BAD_REQUEST:
         console.error('server response:', response.log);
     case MessageEvent.ERROR:
-        download.status = DownloadStatus.ERROR;
-        jobqueue.jobFailed(download);
         connection.send({'cmd': ServerCommand.ABORT});
+    case MessageEvent.INVALID:
+        jobqueue.jobFailed(download);
+        download.status = DownloadStatus.ERROR;
         break;
     }
 
