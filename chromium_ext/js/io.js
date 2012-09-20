@@ -1,6 +1,6 @@
 var io = {};
 
-io.http = function(url, callback, type) {
+io.http = function(url, callback, text) {
     var xhr = new XMLHttpRequest();
     var timeout = window.setTimeout(function() {
         xhr.abort();
@@ -10,11 +10,13 @@ io.http = function(url, callback, type) {
         if (xhr.readyState == XMLHttpRequest.DONE) {
             window.clearTimeout(timeout);
             if (xhr.status == 200)
-                callback(!type ? xhr.responseXML : xhr.responseText);
+                callback(!text ? xhr.responseXML : xhr.responseText);
             else
                 console.error('HTTP error:', xhr.statusText);
         }
     }
+    if (!text)
+        xhr.overrideMimeType('text/xml');
     xhr.open('GET', url, true);
     xhr.send();
 };
