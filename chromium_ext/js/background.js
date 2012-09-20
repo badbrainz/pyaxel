@@ -111,7 +111,7 @@ function runCommand(cmd, var_args) {
         if (jobqueue.search('unassigned').some(expr) && jobqueue.search('active').some(expr))
             return;
 
-        if (/\.meta|(?:4|link)$/i.test(parseUri(arguments[1]).fileName)) {
+        if (/\.meta4$/i.test(parseUri(arguments[1]).fileName)) {
             var args = arguments;
             io.http(arguments[1], function(xml) {
                 try {
