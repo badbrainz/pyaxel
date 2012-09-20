@@ -25,7 +25,7 @@ SRV_SRC_VERSION = '1.1.0'
 INVALID, BAD_REQUEST, ERROR, UNDEFINED, RESERVED, VERIFIED) = range(14)
 
 # channel_c command inputs
-(IDENT, START, STOP, ABORT, QUIT) = range(5)
+(IDENT, START, STOP, ABORT, QUIT, CHECK) = range(6)
 
 
 class StateMachineError(Exception):
@@ -83,6 +83,7 @@ class channel_c:
         self.state.add('listening', START, 'established', self.start)
         self.state.add('listening', ABORT, 'listening', self.abort)
         self.state.add('listening', QUIT, 'listening', self.quit)
+        self.state.add('listening', CHECK, 'listening', self.verify)
         self.state.add('established', STOP, 'listening', self.stop)
         self.state.add('established', ABORT, 'listening', self.abort)
         self.state.add('established', QUIT, 'listening', self.quit)
@@ -140,6 +141,12 @@ class channel_c:
     def quit(self, args):
         self.close()
 
+    def verify(self, args):
+        if self.axel:
+            pyaxellib2.pyaxel_checksum(self.axel, args.get('checksum'), args.get('type'))
+            self.websocket.handle_response(deflate_msg({'event':RESERVED,
+                'log':pyaxellib2.pyaxel_print(self.axel)}))
+
     def update(self):
         if not self.axel or self.axel.ready == -1:
             return
@@ -186,6 +193,12 @@ class channel_c:
                 'log':pyaxellib2.pyaxel_print(self.axel)}))
         elif self.axel.ready == 3 or self.axel.ready == 0:
             self.websocket.handle_response(deflate_msg({'event':INCOMPLETE,
+                'log':pyaxellib2.pyaxel_print(self.axel)}))
+        elif self.axel.ready == -6:
+            self.websocket.handle_response(deflate_msg({'event':VERIFIED,
+                'log':pyaxellib2.pyaxel_print(self.axel)}))
+        elif self.axel.ready == -7:
+            self.websocket.handle_response(deflate_msg({'event':INVALID,
                 'log':pyaxellib2.pyaxel_print(self.axel)}))
 
         pyaxellib2.pyaxel_close(self.axel)
