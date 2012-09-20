@@ -1,0 +1,27 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<style>
+html,body{margin:0;padding:0}
+body{background:#606060;font:13px Helvetica,Arial,sans-serif;min-height:52px;min-width:154px}
+hr{border:none;border-top:solid 1px hsl(0, 0%, 32%);border-bottom:solid 1px dimGray;height:0;margin:4px;padding:0}
+.hbox hr{border:none;border-left:solid 1px hsl(0, 0%, 32%);border-right:solid 1px dimGray;height:auto;margin:4px 0}
+#main{display:-webkit-box;-webkit-box-orient:vertical;position:absolute;width:100%;height:100%}
+#preferences{margin-bottom:2px}
+.menuitem{-webkit-user-select:none;color:white;margin:0;padding:4px 0 4px 33px;white-space:nowrap;height:16px;-webkit-box-pack:center;display:-webkit-box;-webkit-box-orient:vertical}
+.menuitem.disabled{color:hsl(0, 0%, 30%);cursor:default}.menuitem:not(.disabled):hover{background: -webkit-linear-gradient(hsl(218, 71%, 61%),hsl(214, 45%, 43%));-webkit-box-shadow: hsla(0, 100%, 0%, .3) 0 0 3px,hsla(0, 100%, 100%, .7) 0 0 1px inset;cursor: pointer}
+.menuitem.h{width:50%;-webkit-box-pack:center;-webkit-box-flex:1;text-align:center}
+.menuitem-decor{text-shadow:1px 1px 1px rgba(0,0,0,0.18)}
+.menuitem-decor.disabled{text-shadow:1px 1px 1px hsl(0, 0%, 44%)}
+#downloads:before{content:'';background-image:url(../images/dbase.png);width:16px;height:16px;position:absolute;left:10px}
+#preferences:before{content:'';background-image:url(../images/gear.png);width:16px;height:16px;position:absolute;left:10px}
+</style>
+<script src="js/popup.js"></script>
+</head>
+<body>
+<div id="main">
+<div class="menuitem" id="downloads">Downloads</div>
+<div class="menuitem" id="preferences">Preferences</div>
+</div>
+</body>
+</html>
