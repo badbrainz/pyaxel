@@ -120,12 +120,14 @@ class channel_c:
         for p in prefs:
             setattr(conf, p, prefs[p])
 
-        self.axel = pyaxellib2.pyaxel_new(conf, args.get('url'))
-
-        self.server.add_websocket_channel(self)
-
-        self.websocket.handle_response(deflate_msg({'event':INITIALIZING,
-            'log':pyaxellib2.pyaxel_print(self.axel)}))
+        if 'url' in args:
+            self.server.add_websocket_channel(self)
+            self.axel = pyaxellib2.pyaxel_new(conf, args.get('url'), args.get('metadata'))
+            self.websocket.handle_response(deflate_msg({'event':CREATED,
+                'log':pyaxellib2.pyaxel_print(self.axel)}))
+        else:
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST}))
+            self.state.start('listening')
 
     def stop(self, args):
         if self.axel:
@@ -144,7 +146,7 @@ class channel_c:
     def quit(self, args):
         self.close()
 
-    def verify(self, args):
+    def validate(self, args):
         if self.axel:
             self.server.add_websocket_channel(self)
             pyaxellib2.pyaxel_checksum(self.axel, args.get('checksum'), args.get('type'))
