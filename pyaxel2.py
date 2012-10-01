@@ -41,9 +41,11 @@ class tokenbucket_c():
             self.credits -= tokens
         return max(0, expected_time)
 
-def pyaxel_new(conf, url):
+
+def pyaxel_new(conf, url, metadata=None):
     pyaxel = pyaxellib.pyaxel_t()
     pyaxel.conf = conf
+    pyaxel.metadata = metadata
 
     if not hasattr(conf, 'download_path') or not conf.download_path:
         pyaxel.conf.download_path = pyaxellib.PYAXEL_PATH
