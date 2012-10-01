@@ -282,7 +282,7 @@ def initialize_thread(pyaxel):
     if not bool(os.stat(pyaxel.conf.download_path).st_mode & stat.S_IWUSR):
         return (-3, pyaxel)
 
-    pyaxel.conn = [pyaxellib.conn_t() for i in xrange(pyaxel.conf.num_connections)]
+    pyaxel.conn = [pyaxellib.conn_t()]
     pyaxel.conn[0].conf = pyaxel.conf
 
     for i in xrange(len(pyaxel.url)):
@@ -321,6 +321,9 @@ def initialize_thread(pyaxel):
     pyaxel.file_type = pyaxellib.http_header(pyaxel.conn[0].http, 'content-type')
     if not pyaxel.file_type:
         pyaxel.file_type = 'application/octet-stream'
+
+    if pyaxel.conf.num_connections > 1:
+        pyaxel.conn.extend([pyaxellib.conn_t() for i in xrange(pyaxel.conf.num_connections - 1)])
 
     if not pyaxellib.pyaxel_open(pyaxel):
         pyaxellib.pyaxel_error(pyaxel, pyaxel.last_error)
