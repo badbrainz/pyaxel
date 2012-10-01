@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import pdb
-
 import asyncore
 import asynchat
 import json
@@ -82,7 +80,7 @@ class channel_c:
         self.state.add('listening', START, 'established', self.start)
         self.state.add('listening', ABORT, 'listening', self.abort)
         self.state.add('listening', QUIT, 'listening', self.quit)
-        self.state.add('listening', CHECK, 'listening', self.verify)
+        self.state.add('listening', CHECK, 'listening', self.validate)
         self.state.add('established', STOP, 'listening', self.stop)
         self.state.add('established', ABORT, 'listening', self.abort)
         self.state.add('established', QUIT, 'listening', self.quit)
@@ -96,7 +94,7 @@ class channel_c:
             resp = '\'%s\' %s <state:%s>' % (e.inp, e.msg, e.cur)
             self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,
                 'log':resp}))
-        except (StateMachineError, Exception), e:
+        except (StateMachineError, Exception):
             self.close()
 
     def chat_closed(self):
@@ -104,11 +102,10 @@ class channel_c:
 
     def ident(self, args):
         if args.get('type') == 'ECHO':
-            self.websocket.handle_response(deflate_msg({'event':OK,
-                'log':args.get('msg')}))
+            self.websocket.handle_response(args.get('msg'))
             self.close()
         else:
-            self.websocket.handle_response(deflate_msg({'event':ACK,
+            self.websocket.handle_response(deflate_msg({'event':ACCEPTED,
                 'version': SRV_SRC_VERSION}))
 
     def start(self, args):
@@ -217,15 +214,6 @@ class server_c(asyncore.dispatcher):
             self.websocket_channels.remove(channel)
 
 
-def format_size(num, prefix=True):
-    if num < 1:
-        return '0'
-    try:
-        k = int(math.log(num, 1024))
-        return '%.2f%s' % (num / (1024.0 ** k), 'bkMGTPEY'[k] if prefix else '')
-    except TypeError:
-        return '0'
-
 def deflate_msg(msg):
     return json.dumps(msg, separators=(',',':'))
 
@@ -235,8 +223,8 @@ def inflate_msg(msg):
 def run(opts={}):
     major, minor, micro, release, serial = sys.version_info
     if (major, minor, micro) < (2, 6, 0):
-        print 'aborting: unsupported python version: %s.%s.%s' % \
-            (major, minor, micro)
+        sys.stderr.write('aborting: unsupported python version: %s.%s.%s\n' % \
+            (major, minor, micro))
         return 1
 
     if opts.get('verbose'):
@@ -249,7 +237,6 @@ def run(opts={}):
         pass
     except KeyboardInterrupt:
         print
-        pass
     except:
         import debug
         debug.backtrace()
@@ -260,10 +247,10 @@ def run(opts={}):
     return 0
 
 if __name__ == '__main__':
-    import optparse
-    usage='Usage: %prog [options]'
-    description='Note: options will override %s file.' % pyaxellib.PYAXEL_CONFIG
-    parser = optparse.OptionParser(usage=usage, description=description, version=SRV_SRC_VERSION)
+    from optparse import OptionParser
+    usage = 'Usage: %prog [options]'
+    description = 'Note: options will override %s file.' % pyaxellib.PYAXEL_CONFIG
+    parser = OptionParser(usage=usage, description=description, version=SRV_SRC_VERSION)
     parser.add_option('-a', '--host', dest='host',
                       type='string', default='127.0.0.1',
                       help='change the address of the network interface',
