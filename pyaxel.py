@@ -51,6 +51,7 @@ class conf_t():
     save_state_interval = 10
     search_top = 3
     user_agent = DEFAULT_USER_AGENT
+    verbose = 1
 
 class confparser_c(ConfigParser.RawConfigParser):
 
@@ -94,6 +95,7 @@ def conf_load(conf, path):
     conf.save_state_interval = int(parser.getopt('save_state_interval', conf.save_state_interval))
     conf.search_top = int(parser.getopt('search_top', conf.search_top))
     conf.user_agent = str(parser.getopt('user_agent', conf.user_agent))
+    conf.verbose = int(parser.getopt('verbose', conf.verbose))
 
     return 1
 
@@ -375,9 +377,10 @@ def pyaxel_close(pyaxel):
     #del pyaxel.conn[:]
 
 def pyaxel_message(pyaxel, msg):
-    if not pyaxel.message:
-        pyaxel.message = []
-    pyaxel.message.append(msg)
+    if pyaxel.conf.verbose:
+        if not pyaxel.message:
+            pyaxel.message = []
+        pyaxel.message.append(msg)
 
 def pyaxel_error(pyaxel, msg):
     pyaxel.last_error = msg
