@@ -235,7 +235,7 @@ class server_c(asyncore.dispatcher):
             conn, addr = self.accept()
             if addr:
                 self.log('incoming connection from %s' % repr(addr))
-                self.channels.append(channel_c(conn, self))
+                channel_c(conn, self)
         except socket.error, err:
             self.log_info('error: %s' % err, 'error')
 
