@@ -175,6 +175,8 @@ def pyaxel_do(pyaxel):
             pyaxellib.pyaxel_message(pyaxel, 'Download complete')
             pyaxel.ready = 1
 
+    pyaxel_message(pyaxel)
+
 def pyaxel_seek(pyaxel, offset):
     qfile_map[pyaxel.outfd].put(offset, block=True)
 
