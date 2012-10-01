@@ -403,44 +403,41 @@ def main(argv=None):
 
     if len(args) == 0:
         parser.print_help()
-    else:
-        # TODO search mirrors
-        try:
-            conf = pyaxellib.conf_t()
-
-            pyaxellib.conf_init(conf)
-            if not pyaxellib.conf_load(conf, pyaxellib.PYAXEL_PATH + pyaxellib.PYAXEL_CONFIG):
-                return 1
-
-            options = vars(options)
-            for prop in options:
-                if options[prop] != None:
-                    setattr(conf, prop, options[prop])
-
-            # TODO mirror file comparison
-            axel = pyaxel_new(conf, args)
-
-            while axel.active_threads:
-                pyaxel_do(axel)
-                if axel.message:
-                    pyaxellib.pyaxel_print(axel)
-                if axel.size:
-                    sys.stdout.write('Downloaded [%d%%]\r' % (axel.bytes_done * 100 / axel.size))
-                sys.stdout.flush()
-                time.sleep(1)
-
-            pyaxellib.pyaxel_print(axel)
-
-            pyaxel_close(axel)
-        except KeyboardInterrupt:
-            print
-            return 1
-        except:
-            import debug
-            debug.backtrace()
-            return 1
-
         return 0
+
+    try:
+        conf = pyaxellib.conf_t()
+        pyaxellib.conf_init(conf)
+        if not pyaxellib.conf_load(conf, pyaxellib.PYAXEL_PATH + pyaxellib.PYAXEL_CONFIG):
+            return 1
+
+        options = vars(options)
+        for prop in options:
+            if options[prop] != None:
+                setattr(conf, prop, options[prop])
+
+        axel = pyaxel_new(conf, args[0] if len(args) == 1 else args)
+        while axel.active_threads:
+            pyaxel_do(axel)
+            if axel.msg and axel.msg['log']:
+                sys.stdout.write(axel.msg['log'])
+                sys.stdout.write('\n')
+            if axel.size:
+                sys.stdout.write('Downloaded [%d%%]\r' % (axel.bytes_done * 100 / axel.size))
+            sys.stdout.flush()
+            time.sleep(1)
+
+        pyaxellib.pyaxel_print(axel)
+        pyaxel_close(axel)
+    except KeyboardInterrupt:
+        print
+        return 1
+    except:
+        import debug
+        debug.backtrace()
+        return 1
+
+    return 0
 
 if __name__ == '__main__':
     sys.exit(main())
