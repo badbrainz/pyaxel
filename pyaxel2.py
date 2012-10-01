@@ -398,6 +398,9 @@ def main(argv=None):
     parser.add_option('-u', '--user-agent', dest='user_agent',
                       type='string', metavar='x',
                       help='user agent header')
+    parser.add_option('-q', '--quiet', dest='verbose',
+                      action='store_false',
+                      help='leave stdout alone')
 
     (options, args) = parser.parse_args(argv[1:])
 
