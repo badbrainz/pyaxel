@@ -21,6 +21,9 @@ PYAXEL_SRC_VERSION = '1.0.0'
 
 qfile_map = {}
 
+(FOUND, PROCESSING, COMPLETED, INCOMPLETE, STOPPED, INVALID, ERROR,
+ VERIFIED) = range(200, 208)
+
 
 class tokenbucket_c():
     def __init__(self, tokens, fill_rate):
@@ -228,6 +231,52 @@ def pyaxel_print(pyaxel):
     messages = '\n'.join(pyaxel.message)
     del pyaxel.message[:]
     return messages
+
+def pyaxel_message(pyaxel):
+    pyaxel.msg = None
+
+    if pyaxel.active_threads:
+        if pyaxel.ready == -5:
+            pyaxel.msg = {
+                'event': FOUND,
+                'name': pyaxel.file_fname,
+                'path': pyaxel.file_name,
+                'type': pyaxel.file_type,
+                'size': pyaxel.size
+            }
+            if pyaxel.conf.alternate_output == 0:
+                pyaxel.msg['chunks'] = [sum([conn.last_byte - conn.first_byte for conn in pyaxel.conn])]
+                pyaxel.msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in pyaxel.conn])]
+            elif pyaxel.conf.alternate_output == 1:
+                pyaxel.msg['chunks'] = [conn.last_byte - conn.first_byte for conn in pyaxel.conn]
+                pyaxel.msg['progress'] = [conn.current_byte - conn.first_byte for conn in pyaxel.conn]
+        elif pyaxel.ready in (0, 1):
+            pyaxel.msg = {
+                'event': PROCESSING,
+                'rate': format_size(pyaxel.bytes_per_second)
+            }
+            if pyaxel.conf.alternate_output == 0:
+                pyaxel.msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in pyaxel.conn])]
+            elif pyaxel.conf.alternate_output == 1:
+                pyaxel.msg['progress'] = [conn.current_byte - conn.first_byte for conn in pyaxel.conn]
+    else:
+        if pyaxel.ready in (0, 3, -1):
+            pyaxel.msg = {'event':INCOMPLETE}
+        elif pyaxel.ready == 1:
+            pyaxel.msg = {'event':COMPLETED}
+        elif pyaxel.ready == 2:
+            pyaxel.msg = {"event":STOPPED}
+        elif pyaxel.ready == -2:
+            pyaxel.msg = {'event':ERROR}
+        elif pyaxel.ready == -6:
+            pyaxel.msg = {'event':VERIFIED}
+        elif pyaxel.ready == -7:
+            pyaxel.msg = {'event':INVALID}
+
+    log = pyaxel_print(pyaxel)
+    if pyaxel.conf.verbose:
+        if pyaxel.msg:
+            pyaxel.msg['log'] = log
 
 def initialize_thread(pyaxel):
     if not bool(os.stat(pyaxel.conf.download_path).st_mode & stat.S_IWUSR):
