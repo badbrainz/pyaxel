@@ -122,17 +122,21 @@ class channel_c:
 
         self.axel = pyaxellib2.pyaxel_new(conf, args.get('url'))
 
+        self.server.add_websocket_channel(self)
+
         self.websocket.handle_response(deflate_msg({'event':INITIALIZING,
             'log':pyaxellib2.pyaxel_print(self.axel)}))
 
     def stop(self, args):
         if self.axel:
+            self.server.add_websocket_channel(self)
             pyaxellib2.pyaxel_stop(self.axel)
             self.websocket.handle_response(deflate_msg({'event':CLOSING,
                 'log':pyaxellib2.pyaxel_print(self.axel)}))
 
     def abort(self, args):
         if self.axel:
+            self.server.add_websocket_channel(self)
             pyaxellib2.pyaxel_abort(self.axel)
             self.websocket.handle_response(deflate_msg({'event':CLOSING,
                 'log':pyaxellib2.pyaxel_print(self.axel)}))
@@ -142,6 +146,7 @@ class channel_c:
 
     def verify(self, args):
         if self.axel:
+            self.server.add_websocket_channel(self)
             pyaxellib2.pyaxel_checksum(self.axel, args.get('checksum'), args.get('type'))
             self.websocket.handle_response(deflate_msg({'event':RESERVED,
                 'log':pyaxellib2.pyaxel_print(self.axel)}))
@@ -220,7 +225,7 @@ class channel_c:
 class server_c(asyncore.dispatcher):
     def __init__(self):
         asyncore.dispatcher.__init__(self)
-        self.channels = []
+        self.websocket_channels = []
 
     def writable(self):
         return False
@@ -242,18 +247,22 @@ class server_c(asyncore.dispatcher):
         self.log('websocket server waiting on %s' % repr(endpoint))
         while asyncore.socket_map:
             asyncore.loop(use_poll=True, timeout=1, count=1)
-            for channel in self.channels:
+            for channel in self.websocket_channels:
                 channel.update()
 
     def stop_service(self):
         self.log('stopping service')
         self.close()
-        for c in self.channels:
-            c.close(status=1001, reason='server shutdown')
+        for channel in self.websocket_channels:
+            channel.close(status=1001, reason='server shutdown')
 
-    def remove_channel(self, channel):
-        if channel in self.channels:
-            self.channels.remove(channel)
+    def add_websocket_channel(self, channel):
+        if channel not in self.websocket_channels:
+            self.websocket_channels.append(channel)
+
+    def remove_websocket_channel(self, channel):
+        if channel in self.websocket_channels:
+            self.websocket_channels.remove(channel)
 
 
 def format_size(num, prefix=True):
