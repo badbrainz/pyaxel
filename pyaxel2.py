@@ -197,8 +197,6 @@ def pyaxel_close(pyaxel):
     elif pyaxel.bytes_done > 0 and pyaxel.ready != -1:
         pyaxel_save(pyaxel)
 
-    pyaxel.ready = -1
-
     if pyaxel.outfd != -1:
         os.close(pyaxel.outfd)
         pyaxel.outfd = -1
