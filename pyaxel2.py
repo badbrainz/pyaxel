@@ -69,6 +69,64 @@ def pyaxel_new(conf, url, metadata=None):
 
     return pyaxel
 
+def pyaxel_open(pyaxel):
+    pyaxellib.pyaxel_message(pyaxel, 'Opening output file: %s' % pyaxel.file_name)
+
+    pyaxel.outfd = -1
+
+    if not pyaxel.conn[0].supported:
+        pyaxel_message(pyaxel, 'Server unsupported. Starting with one connection.')
+        pyaxel.conf.num_connections = 1
+        pyaxel.conn = pyaxel.conn[:1]
+        pyaxel_divide(pyaxel)
+    else:
+        try:
+            with open('%s.st' % pyaxel.file_name, 'rb') as fd:
+                st = pickle.load(fd)
+
+                pyaxel.conf.num_connections = st['num_connections']
+
+                if pyaxel.conf.num_connections > len(pyaxel.conn):
+                    pyaxel.conn.extend([conn_t() for i in xrange(pyaxel.conf.num_connections - len(pyaxel.conn))])
+                elif pyaxel.conf.num_connections < len(pyaxel.conn):
+                    pyaxel.conn = pyaxel.conn[:pyaxel.conf.num_connections]
+
+                pyaxel_divide(pyaxel)
+
+                pyaxel.bytes_done = st['bytes_done']
+                for conn, byte in zip(pyaxel.conn, st['current_byte']):
+                    conn.current_byte = byte
+
+                pyaxellib.pyaxel_message(pyaxel, 'State file found: %d bytes downloaded, %d remaining' %
+                    (pyaxel.bytes_done, pyaxel.size - pyaxel.bytes_done))
+
+                try:
+                    flags = os.O_CREAT | os.O_WRONLY
+                    if hasattr(os, 'O_BINARY'):
+                        flags |= os.O_BINARY
+                    pyaxel.outfd = os.open(pyaxel.file_name, flags)
+                except os.error:
+                    pyaxellib.pyaxel_error(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
+                    return 0
+        except (IOError, EOFError, pickle.UnpicklingError):
+            pass
+
+    if pyaxel.outfd == -1:
+        pyaxel_divide(pyaxel)
+
+        try:
+            flags = os.O_CREAT | os.O_WRONLY
+            if hasattr(os, 'O_BINARY'):
+                flags |= os.O_BINARY
+            pyaxel.outfd = os.open(pyaxel.file_name, flags)
+            if hasattr(os, 'ftruncate'):
+                os.ftruncate(pyaxel.outfd, pyaxel.size)
+        except os.error:
+            pyaxellib.pyaxel_error(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
+            return 0
+
+    return 1
+
 def pyaxel_stop(pyaxel):
     pyaxellib.pyaxel_message(pyaxel, 'Stopping download: %s' % pyaxel.file_name)
     pyaxel.ready = 2 if pyaxel.ready != 2 else -1
@@ -218,6 +276,15 @@ def pyaxel_save(pyaxel):
     except IOError:
         pass
 
+def pyaxel_divide(pyaxel):
+    pieces = -(-pyaxel.size / pyaxel.conf.buffer_size)
+    chunks = pieces / pyaxel.conf.num_connections
+    for i in xrange(pyaxel.conf.num_connections):
+        pyaxel.conn[i].first_byte = i * chunks * pyaxel.conf.buffer_size
+        pyaxel.conn[i].current_byte = pyaxel.conn[i].first_byte
+        pyaxel.conn[i].last_byte = (i + 1) * chunks * pyaxel.conf.buffer_size - 1
+    pyaxel.conn[-1].last_byte = pyaxel.size - 1
+
 def pyaxel_checksum(pyaxel, checksum, sum_type):
     pyaxel.active_threads += 1
     pyaxel.ready = 100
@@ -322,7 +389,7 @@ def initialize_thread(pyaxel):
     if pyaxel.conf.num_connections > 1:
         pyaxel.conn.extend([pyaxellib.conn_t() for i in xrange(pyaxel.conf.num_connections - 1)])
 
-    if not pyaxellib.pyaxel_open(pyaxel):
+    if not pyaxel_open(pyaxel):
         pyaxellib.pyaxel_error(pyaxel, pyaxel.last_error)
         pyaxel.ready = -2
         return (-2, pyaxel)
