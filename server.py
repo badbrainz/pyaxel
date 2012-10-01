@@ -154,61 +154,12 @@ class channel_c:
                 'log':pyaxellib2.pyaxel_print(self.axel)}))
 
     def update(self):
-        if not self.axel or self.axel.ready == -1:
-            return
-
+        pyaxellib2.pyaxel_do(self.axel)
         if self.axel.active_threads:
-            pyaxellib2.pyaxel_do(self.axel)
-
-            if self.axel.ready == -5:
-                msg = {
-                    'event': OK,
-                    'name': self.axel.file_name,
-                    'type': self.axel.file_type,
-                    'size': self.axel.size,
-                    'log': pyaxellib2.pyaxel_print(self.axel)
-                }
-                if self.axel.conf.alternate_output == 0:
-                    msg['chunks'] = [sum([conn.last_byte - conn.first_byte for conn in self.axel.conn])]
-                    msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in self.axel.conn])]
-                elif self.axel.conf.alternate_output == 1:
-                    msg['chunks'] = [conn.last_byte - conn.first_byte for conn in self.axel.conn]
-                    msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
-                self.websocket.handle_response(deflate_msg(msg))
-
-            elif self.axel.ready == 0 or self.axel.ready == 1:
-                msg = {
-                    'event': PROCESSING,
-                    'rate': format_size(self.axel.bytes_per_second),
-                    'log': pyaxellib2.pyaxel_print(self.axel)
-                }
-                if self.axel.conf.alternate_output == 0:
-                    msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in self.axel.conn])]
-                elif self.axel.conf.alternate_output == 1:
-                    msg['progress'] = [conn.current_byte - conn.first_byte for conn in self.axel.conn]
-                self.websocket.handle_response(deflate_msg(msg))
-
-            return
-
-        if self.axel.ready == 1:
-            self.websocket.handle_response(deflate_msg({'event':COMPLETED,
-                'log':pyaxellib2.pyaxel_print(self.axel)}))
-        elif self.axel.ready == 2:
-            self.websocket.handle_response(deflate_msg({"event":STOPPED,
-                'log':pyaxellib2.pyaxel_print(self.axel)}))
-        elif self.axel.ready == 3 or self.axel.ready == 0:
-            self.websocket.handle_response(deflate_msg({'event':INCOMPLETE,
-                'log':pyaxellib2.pyaxel_print(self.axel)}))
-        elif self.axel.ready == -6:
-            self.websocket.handle_response(deflate_msg({'event':VERIFIED,
-                'log':pyaxellib2.pyaxel_print(self.axel)}))
-        elif self.axel.ready == -7:
-            self.websocket.handle_response(deflate_msg({'event':INVALID,
-                'log':pyaxellib2.pyaxel_print(self.axel)}))
-
-        pyaxellib2.pyaxel_close(self.axel)
-
-        self.state.start('listening')
+            if self.axel.msg:
+                self.websocket.handle_response(deflate_msg(self.axel.msg))
+        else:
+            self.close(0)
 
     def close(self, status=1000, reason=''):
         if self.websocket.handshaken:
