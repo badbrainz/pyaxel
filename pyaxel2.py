@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import hashlib
+import math
 import Queue
 import os
 import socket
@@ -208,6 +209,10 @@ def pyaxel_do(pyaxel):
                 pyaxellib.pyaxel_message(pyaxel, 'Connection %d interrupted' % pyaxel.conn.index(item))
             else:
                 pyaxellib.pyaxel_message(pyaxel, 'Connection %d finished' % pyaxel.conn.index(item))
+        elif state == 5:
+            pyaxel.active_threads -= 1
+            pyaxellib.conn_disconnect(item)
+            pyaxellib.pyaxel_message(pyaxel, 'Connection %d error: checksum invalid' % pyaxel.conn.index(item))
 
     if pyaxel.ready == 0:
         if time.time() > pyaxel.next_state:
@@ -284,6 +289,13 @@ def pyaxel_divide(pyaxel):
         pyaxel.conn[i].current_byte = pyaxel.conn[i].first_byte
         pyaxel.conn[i].last_byte = (i + 1) * chunks * pyaxel.conf.buffer_size - 1
     pyaxel.conn[-1].last_byte = pyaxel.size - 1
+
+def pyaxel_hashrange(pyaxel, conn):
+    hash_list = pyaxel.metadata['pieces']['hashes']
+    hash_type = pyaxel.metadata['pieces']['type']
+    buffer_size = pyaxel.metadata['pieces']['length']
+    for i in xrange(conn.current_byte / buffer_size, -(-(conn.last_byte + 1) / buffer_size)):
+        yield (min(conn.last_byte + 1 - conn.current_byte, buffer_size), hashlib.new(hash_type), hash_list[i])
 
 def pyaxel_checksum(pyaxel, checksum, sum_type):
     pyaxel.active_threads += 1
@@ -386,6 +398,11 @@ def initialize_thread(pyaxel):
     if not pyaxel.file_type:
         pyaxel.file_type = 'application/octet-stream'
 
+    if pyaxel.metadata and 'pieces' in pyaxel.metadata:
+        pyaxel.conf.max_speed = 0 # FIXME
+        pyaxel.conf.buffer_size = pyaxel.metadata['pieces']['length']
+        pyaxel.conf.num_connections = sorted((1, pyaxel.conf.num_connections, len(pyaxel.metadata['pieces']['hashes'])))[1]
+
     if pyaxel.conf.num_connections > 1:
         pyaxel.conn.extend([pyaxellib.conn_t() for i in xrange(pyaxel.conf.num_connections - 1)])
 
@@ -435,25 +452,60 @@ def configuration_thread(pyaxel):
     return (-4, pyaxel)
 
 def download_thread(pyaxel, conn):
-    while pyaxel.ready == 0:
-        conn.last_transfer = time.time()
-        fetch_size = min(conn.last_byte + 1 - conn.current_byte, pyaxel.conf.buffer_size)
-        try:
-            data = conn.http.fd.read(fetch_size)
-        except socket.error:
-            return (1, conn)
-        size = len(data)
-        if size == 0:
-            return (4, conn)
-        if size != fetch_size:
-            return (1, conn)
-        try:
-            pyaxel_seek(pyaxel, conn.current_byte)
-            pyaxel_write(pyaxel, data)
-        except IOError:
-            return (2, conn)
-        conn.current_byte += size
-        time.sleep(conn.delay)
+    if pyaxel.metadata and 'pieces' in pyaxel.metadata:
+        for buffer_size, hash_obj, checksum in pyaxel_hashrange(pyaxel, conn):
+            if pyaxel.ready != 0:
+                break
+
+            conn.last_transfer = time.time()
+
+            try:
+                data = conn.http.fd.read(buffer_size)
+            except socket.error:
+                return (1, conn)
+
+            size = len(data)
+            if size == 0:
+                return (4, conn)
+            if size != buffer_size:
+                return (1, conn)
+
+            hash_obj.update(data)
+            if hash_obj.hexdigest() != checksum:
+                return (5, conn)
+
+            try:
+                pyaxel_seek(pyaxel, conn.current_byte)
+                pyaxel_write(pyaxel, data)
+            except IOError:
+                return (2, conn)
+
+            conn.current_byte += size
+            time.sleep(conn.delay)
+    else:
+        while pyaxel.ready == 0:
+            conn.last_transfer = time.time()
+            fetch_size = min(conn.last_byte + 1 - conn.current_byte, pyaxel.conf.buffer_size)
+
+            try:
+                data = conn.http.fd.read(fetch_size)
+            except socket.error:
+                return (1, conn)
+
+            size = len(data)
+            if size == 0:
+                return (4, conn)
+            if size != fetch_size:
+                return (1, conn)
+
+            try:
+                pyaxel_seek(pyaxel, conn.current_byte)
+                pyaxel_write(pyaxel, data)
+            except IOError:
+                return (2, conn)
+
+            conn.current_byte += size
+            time.sleep(conn.delay)
 
     return (4, conn)
 
