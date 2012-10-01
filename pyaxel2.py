@@ -160,11 +160,12 @@ def pyaxel_do(pyaxel):
             pyaxel_save(pyaxel)
             pyaxel.next_state = time.time() + pyaxel.conf.save_state_interval
 
-        for conn, bucket in zip(pyaxel.conn, pyaxel.buckets):
-            bucket.capacity = pyaxel.conf.max_speed / pyaxel.active_threads
-            bucket.fill_rate = pyaxel.conf.max_speed / pyaxel.active_threads
-            if conn.enabled:
-                conn.delay = bucket.consume((conn.current_byte - conn.start_byte) / (time.time() - pyaxel.start_time))
+        if pyaxel.active_threads:
+            for conn, bucket in zip(pyaxel.conn, pyaxel.buckets):
+                bucket.capacity = pyaxel.conf.max_speed / pyaxel.active_threads
+                bucket.fill_rate = pyaxel.conf.max_speed / pyaxel.active_threads
+                if conn.enabled:
+                    conn.delay = bucket.consume((conn.current_byte - conn.start_byte) / (time.time() - pyaxel.start_time))
 
         pyaxel.bytes_done = pyaxel.bytes_start + sum([conn.current_byte - conn.start_byte for conn in pyaxel.conn])
         pyaxel.bytes_per_second = (pyaxel.bytes_done - pyaxel.bytes_start) / (time.time() - pyaxel.start_time)
