@@ -692,118 +692,98 @@ def main(argv=None):
 
     if len(args) == 0:
         parser.print_help()
-    else:
-        try:
-            axel = None
-            conf = conf_t()
-
-            conf_init(conf)
-            if not conf_load(conf, PYAXEL_PATH + PYAXEL_CONFIG):
-                return 1
-
-            options = vars(options)
-            for prop in options:
-                if hasattr(conf, prop) and options[prop] != None:
-                    setattr(conf, prop, options[prop])
-
-            if hasattr(options, 'search'):
-                # TODO
-                #   search mirrors
-                pass
-            if len(args) == 1:
-                axel = pyaxel_new(conf, 0, args[0])
-            else:
-                # TODO resource comparison?
-                search = []
-                for arg in args:
-                    search.append(search_c())
-                    search[-1].url = arg
-                axel = pyaxel_new(conf, len(search), search)
-
-            if axel.ready == -1:
-                pyaxel_print(axel)
-                return 1
-
-            pyaxel_print(axel)
-
-            if not hasattr(conf, 'download_path') or not conf.download_path:
-                conf.download_path = PYAXEL_PATH
-            if not conf.download_path.endswith(os.path.sep):
-                conf.download_path += os.path.sep
-
-            axel.file_name = conf.download_path + axel.file_name
-
-            # TODO check permissions, destination opt, etc.
-            if not bool(os.stat(conf.download_path).st_mode & stat.S_IWUSR):
-                print 'Can\'t access protected directory: %s' % conf.download_path
-                return 1
-
-            if not pyaxel_open(axel):
-                pyaxel_print(axel)
-                return 1
-
-            pyaxel_start(axel)
-            pyaxel_print(axel)
-
-            while not axel.ready:
-                prev = axel.bytes_done
-                pyaxel_do(axel)
-
-                if conf.alternate_output:
-                    if not axel.message and prev != axel.bytes_done:
-                        print_alternate_output(axel)
-                else:
-                    # TODO use wget-style
-                    if not axel.message and prev != axel.bytes_done:
-                        print_alternate_output(axel)
-
-                if axel.message:
-                    if conf.alternate_output:
-                        sys.stdout.write('\r\x1b[K')
-                    else:
-                        sys.stdout.write('\n')
-                    pyaxel_print(axel)
-                    if not axel.ready:
-                        if conf.alternate_output != 1:
-                            # TODO use wget-style
-                            if not axel.message and prev != axel.bytes_done:
-                                print_alternate_output(axel)
-                        else:
-                            print_alternate_output(axel)
-                elif axel.ready:
-                    sys.stdout.write('\n')
-
-            pyaxel_close(axel)
-            sys.stdout.flush()
-        except KeyboardInterrupt:
-            print
-            return 1
-        except Exception, e:
-            print e
-            print 'Unknown error!'
-            return 1
-
         return 0
 
-# TODO should include little cute dots
-def print_alternate_output(pyaxel):
-    if pyaxel.bytes_done <= pyaxel.size:
-        sys.stdout.write('\r\x1b[K')
-        sys.stdout.write('Progress: %d%%' % (pyaxel.bytes_done * 100 / pyaxel.size))
-        seconds = int(pyaxel.finish_time - time.time())
-        minutes = int(seconds / 60)
-        seconds -= minutes * 60
-        hours = int(minutes / 60)
-        minutes -= hours * 60
-        days = int(hours / 24)
-        hours -= days * 24
-        if days:
-            sys.stdout.write(' [%dd %dh]' % (days, hours))
-        elif hours:
-            sys.stdout.write(' [%dh %dm]' % (hours, minutes))
+    try:
+        axel = None
+        conf = conf_t()
+
+        conf_init(conf)
+        if not conf_load(conf, PYAXEL_PATH + PYAXEL_CONFIG):
+            return 1
+
+        options = vars(options)
+        for prop in options:
+            if hasattr(conf, prop) and options[prop] != None:
+                setattr(conf, prop, options[prop])
+
+        if hasattr(options, 'search'):
+            # TODO
+            #   search mirrors
+            pass
+        if len(args) == 1:
+            axel = pyaxel_new(conf, 0, args[0])
         else:
-            sys.stdout.write(' [%dm %ds]' % (minutes, seconds))
-    sys.stdout.flush()
+            # TODO resource comparison?
+            search = []
+            for arg in args:
+                search.append(search_c())
+                search[-1].url = arg
+            axel = pyaxel_new(conf, len(search), search)
+
+        if axel.ready == -1:
+            pyaxel_print(axel)
+            return 1
+
+        pyaxel_print(axel)
+
+        if not hasattr(conf, 'download_path') or not conf.download_path:
+            conf.download_path = PYAXEL_PATH
+        if not conf.download_path.endswith(os.path.sep):
+            conf.download_path += os.path.sep
+
+        axel.file_name = conf.download_path + axel.file_name
+
+        # TODO check permissions, destination opt, etc.
+        if not bool(os.stat(conf.download_path).st_mode & stat.S_IWUSR):
+            print 'Can\'t access protected directory: %s' % conf.download_path
+            return 1
+
+        if not pyaxel_open(axel):
+            pyaxel_print(axel)
+            return 1
+
+        pyaxel_start(axel)
+        pyaxel_print(axel)
+
+        while not axel.ready:
+            prev = axel.bytes_done
+            pyaxel_do(axel)
+
+            if conf.alternate_output:
+                if not axel.message and prev != axel.bytes_done:
+                    print_alternate_output(axel)
+            else:
+                # TODO use wget-style
+                if not axel.message and prev != axel.bytes_done:
+                    print_alternate_output(axel)
+
+            if axel.message:
+                if conf.alternate_output:
+                    sys.stdout.write('\r\x1b[K')
+                else:
+                    sys.stdout.write('\n')
+                pyaxel_print(axel)
+                if not axel.ready:
+                    if conf.alternate_output != 1:
+                        # TODO use wget-style
+                        if not axel.message and prev != axel.bytes_done:
+                            print_alternate_output(axel)
+                    else:
+                        print_alternate_output(axel)
+            elif axel.ready:
+                sys.stdout.write('\n')
+
+        pyaxel_close(axel)
+        sys.stdout.flush()
+    except KeyboardInterrupt:
+        print
+        return 1
+    except:
+        print 'Unknown error!'
+        return 1
+
+    return 0
 
 if __name__ == '__main__':
     sys.exit(main())
