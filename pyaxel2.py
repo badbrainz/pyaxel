@@ -257,8 +257,8 @@ def initialize_thread(pyaxel):
         break
 
     if len(pyaxel.url) == 0:
-        pyaxel.ready = -1
-        return (-1, pyaxel)
+        pyaxel.ready = -2
+        return (-2, pyaxel)
 
     pyaxel.size = pyaxel.conn[0].size
     if pyaxel.size != pyaxellib.INT_MAX:
