@@ -98,7 +98,6 @@ class channel_c:
             self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,
                 'log':resp}))
         except (StateMachineError, Exception), e:
-            self.websocket.handle_response(deflate_msg({'event':ERROR}))
             self.close()
 
     def chat_closed(self):
