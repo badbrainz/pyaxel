@@ -209,17 +209,17 @@ class channel_c:
         self.state.start('listening')
 
     def close(self, status=1000, reason=''):
-        established = self.axel and self.axel.ready == 0
-
-        if established:
-            pyaxellib2.pyaxel_close(self.axel)
-
         if self.websocket.handshaken:
-            if established and self.state.current_state == 'established':
-                self.websocket.handle_response(deflate_msg({"event":INCOMPLETE}))
-            self.websocket.disconnect(status, reason)
+            if self.axel:
+                if self.axel.msg:
+                    self.websocket.handle_response(deflate_msg(self.axel.msg))
+                if self.axel.ready != -1:
+                    pyaxellib2.pyaxel_close(self.axel)
+            if status > 999:
+                self.websocket.disconnect(status, reason)
 
-        self.server.remove_channel(self)
+        self.server.remove_websocket_channel(self)
+        self.state.start('listening')
 
 
 class server_c(asyncore.dispatcher):
