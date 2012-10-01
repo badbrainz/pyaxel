@@ -129,21 +129,22 @@ class Daemon:
 
 if __name__ == "__main__":
     from server import run
-    daemon = Daemon(pidfile='/tmp/pyaxelws.pid', stdout='/tmp/pyaxelws.log')
+    daemon = Daemon(pidfile='/tmp/pyaxelws.pid', stdout='/tmp/pyaxelws.log',
+        stderr='/tmp/pyaxelws.log')
     daemon.run = run
-	if len(sys.argv) == 2:
-		if 'start' == sys.argv[1]:
-			daemon.start()
-		elif 'stop' == sys.argv[1]:
-			daemon.stop()
-		elif 'status' == sys.argv[1]:
-			daemon.status()
-		elif 'restart' == sys.argv[1]:
-			daemon.restart()
-		else:
-			print "Unknown command"
-			sys.exit(2)
-		sys.exit(0)
-	else:
-		print "usage: %s start|stop|status|restart" % sys.argv[0]
-		sys.exit(2)
+    if len(sys.argv) == 2:
+        if 'start' == sys.argv[1]:
+            daemon.start()
+        elif 'stop' == sys.argv[1]:
+            daemon.stop()
+        elif 'status' == sys.argv[1]:
+            daemon.status()
+        elif 'restart' == sys.argv[1]:
+            daemon.restart()
+        else:
+            print "Unknown command"
+            sys.exit(2)
+        sys.exit(0)
+    else:
+        print "usage: %s start|stop|status|restart" % sys.argv[0]
+        sys.exit(2)
