@@ -4,7 +4,6 @@ import hashlib
 import base64
 import array
 
-GOAWAY = 1001
 
 class AsyncChat(asynchat.async_chat):
     """this class implements version 13 of the WebSocket protocol,
