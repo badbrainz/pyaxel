@@ -71,15 +71,11 @@ def pyaxel_new(conf, url, metadata=None):
 
 def pyaxel_stop(pyaxel):
     pyaxellib.pyaxel_message(pyaxel, 'Stopping download: %s' % pyaxel.file_name)
-    for conn in pyaxel.conn:
-        conn.enabled = 0
-    pyaxel.ready = 2
+    pyaxel.ready = 2 if pyaxel.ready != 2 else -1
 
 def pyaxel_abort(pyaxel):
     pyaxellib.pyaxel_message(pyaxel, 'Aborting download: %s' % pyaxel.file_name)
-    for conn in pyaxel.conn:
-        conn.enabled = 0
-    pyaxel.ready = 3
+    pyaxel.ready = 3 if pyaxel.ready != 3 else -1
 
 def pyaxel_do(pyaxel):
     for job in pyaxel.threads.iterProcessedJobs(0):
