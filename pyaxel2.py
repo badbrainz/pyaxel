@@ -18,6 +18,7 @@ try:
 except:
     import pickle
 
+
 PYAXEL_SRC_VERSION = '1.0.0'
 
 qfile_map = {}
@@ -57,16 +58,18 @@ def pyaxel_new(conf, url, metadata=None):
         pyaxel.conf.download_path += os.path.sep
 
     if type(url) is list:
-        pyaxel.conf.num_connections = sorted((1, pyaxel.conf.num_connections, len(url)))[1]
+        pyaxel.conf.num_connections = sorted([1, pyaxel.conf.num_connections, len(url)])[1]
         pyaxel.url = Queue.deque(url)
     else:
         pyaxel.url = Queue.deque([url])
 
-    pyaxellib.pyaxel_message(pyaxel, 'Initializing download.')
+    pyaxellib.pyaxel_message(pyaxel, 'Initializing download')
 
     pyaxel.threads = threadpool.ThreadPool(1)
     pyaxel.threads.addJob(threadpool.JobRequest(initialize_thread, [pyaxel]))
     pyaxel.active_threads = 1
+
+    pyaxel.msg = None
 
     return pyaxel
 
@@ -227,7 +230,7 @@ def pyaxel_do(pyaxel):
                     conn.delay = bucket.consume((conn.current_byte - conn.start_byte) / (time.time() - pyaxel.start_time))
 
         pyaxel.bytes_done = pyaxel.bytes_start + sum([conn.current_byte - conn.start_byte for conn in pyaxel.conn])
-        pyaxel.bytes_per_second = (pyaxel.bytes_done - pyaxel.bytes_start) / (time.time() - pyaxel.start_time)
+        pyaxel.bytes_per_second = (pyaxel.bytes_done - pyaxel.bytes_start) / (time.time() - pyaxel.start_time) # FIXME should never be float
         pyaxel.finish_time = pyaxel.start_time + (pyaxel.size - pyaxel.bytes_start) / (pyaxel.bytes_per_second + 1)
 
         if pyaxel.size and pyaxel.bytes_done == pyaxel.size:
@@ -299,7 +302,6 @@ def pyaxel_hashrange(pyaxel, conn):
 
 def pyaxel_checksum(pyaxel, checksum, sum_type):
     pyaxel.active_threads += 1
-    pyaxel.ready = 100
     pyaxel.threads.addJob(threadpool.JobRequest(validate_thread, [pyaxel, checksum, sum_type]))
     pyaxellib.pyaxel_message(pyaxel, 'Verifying checksum')
 
@@ -376,6 +378,7 @@ def initialize_thread(pyaxel):
             continue
 
         if pyaxel.conn[0].supported != 1 and len(pyaxel.url) > 0:
+            pyaxellib.pyaxel_message(pyaxel, 'Server unsupported: %s' % url)
             continue
 
         pyaxel.url.appendleft(pyaxellib.conn_url(pyaxel.conn[0]))
@@ -429,10 +432,9 @@ def configuration_thread(pyaxel):
         for i in xrange(pyaxel.conf.num_connections):
             pyaxel.buckets.append(tokenbucket_c(speed, speed))
 
-        if pyaxel.conf.max_speed / pyaxel.conf.buffer_size < 1:
-            pyaxel_message(pyaxel, 'Buffer resized for this speed.')
+        if pyaxel.conf.max_speed < pyaxel.conf.buffer_size:
+            pyaxellib.pyaxel_message(pyaxel, 'Buffer resized for this speed')
             pyaxel.conf.buffer_size = pyaxel.conf.max_speed
-        pyaxel.delay_time = 10000 / pyaxel.conf.max_speed * pyaxel.conf.buffer_size * pyaxel.conf.num_connections
 
     pyaxel.start_time = time.time()
     pyaxel.bytes_start = pyaxel.bytes_done
@@ -529,7 +531,7 @@ def validate_thread(pyaxel, checksum, sum_type):
         with open(pyaxel.file_name, 'rb') as fd:
             fd.seek(0)
             while True:
-                data = fd.read(2**20)
+                data = fd.read(2 ** 20)
                 if not data:
                     break
                 algo.update(data)
@@ -541,12 +543,16 @@ def validate_thread(pyaxel, checksum, sum_type):
     pyaxel.ready = -7
     return (-7, pyaxel)
 
+def format_size(num, prefix=True):
+    if num < 1:
+        return '0'
+    try:
+        k = int(math.log(num, 1024))
+        return '%.2f%s' % (num / (1024.0 ** k), 'bkMGTPEY'[k] if prefix else '')
+    except TypeError:
+        return '0'
+
 def main(argv=None):
-    import stat
-    import os
-
-    from optparse import OptionParser
-
     if argv is None:
         argv = sys.argv
 
