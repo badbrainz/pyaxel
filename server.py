@@ -233,10 +233,6 @@ def inflate_msg(msg):
     return json.loads(msg)
 
 def run(opts={}):
-    if sys.platform.startswith('win'):
-        print 'aborting: unsupported platform:', sys.platform
-        return 1
-
     major, minor, micro, release, serial = sys.version_info
     if (major, minor, micro) < (2, 6, 0):
         print 'aborting: unsupported python version: %s.%s.%s' % \
