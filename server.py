@@ -128,7 +128,7 @@ class channel_c:
         elif 'validate' == request['type']:
             if self.axel:
                 self.server.add_websocket_channel(self)
-                pyaxellib2.pyaxel_checksum(self.axel, request.get('checksum'), request.get('type'))
+                pyaxellib2.pyaxel_checksum(self.axel, request.get('checksum'), request.get('algorithm'))
                 self.websocket.handle_response(deflate_msg({'event':RESERVED,
                     'log':pyaxellib2.pyaxel_print(self.axel)}))
 
