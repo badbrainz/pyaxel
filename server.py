@@ -88,7 +88,7 @@ class channel_c:
     def chat_message(self, msg):
         try:
             msg = inflate_msg(msg)
-            self.state.execute(msg['cmd'], msg.get('arg', {}))
+            self.state.execute(msg['cmd'], msg.get('req', {}))
         except TransitionError, e:
             resp = '\'%s\' %s <state:%s>' % (e.inp, e.msg, e.cur)
             self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,
@@ -99,53 +99,54 @@ class channel_c:
     def chat_closed(self):
         self.close()
 
-    def ident(self, args):
-        if args.get('type') == 'ECHO':
-            self.websocket.handle_response(args.get('msg'))
+    def ident(self, request):
+        if request.get('type') == 'ECHO':
+            self.websocket.handle_response(request.get('msg'))
             self.close()
         else:
             self.websocket.handle_response(deflate_msg({'event':ACCEPTED,
                 'version': SRV_SRC_VERSION}))
 
-    def start(self, args):
+    def start(self, request):
         conf = pyaxellib.conf_t()
         pyaxellib.conf_init(conf)
 
-        prefs = args.get('conf', {})
+        prefs = request.get('conf', {})
         for p in prefs:
             setattr(conf, p, prefs[p])
 
-        if 'select' not in args:
+        if 'type' not in request:
             self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST}))
             self.state.start('listening')
+            return
 
-        if 'download' == args['select']:
+        if 'download' == request['type']:
             self.server.add_websocket_channel(self)
-            self.axel = pyaxellib2.pyaxel_new(conf, args.get('url'), args.get('metadata'))
+            self.axel = pyaxellib2.pyaxel_new(conf, request.get('url'), request.get('metadata'))
             self.websocket.handle_response(deflate_msg({'event':CREATED,
                 'log':pyaxellib2.pyaxel_print(self.axel)}))
-        elif 'validate' == args['select']:
+        elif 'validate' == request['type']:
             if self.axel:
                 self.server.add_websocket_channel(self)
-                pyaxellib2.pyaxel_checksum(self.axel, args.get('checksum'), args.get('type'))
+                pyaxellib2.pyaxel_checksum(self.axel, request.get('checksum'), request.get('type'))
                 self.websocket.handle_response(deflate_msg({'event':RESERVED,
                     'log':pyaxellib2.pyaxel_print(self.axel)}))
 
-    def stop(self, args):
+    def stop(self, request):
         if self.axel:
             self.server.add_websocket_channel(self)
             pyaxellib2.pyaxel_stop(self.axel)
             self.websocket.handle_response(deflate_msg({'event':CLOSING,
                 'log':pyaxellib2.pyaxel_print(self.axel)}))
 
-    def abort(self, args):
+    def abort(self, request):
         if self.axel:
             self.server.add_websocket_channel(self)
             pyaxellib2.pyaxel_abort(self.axel)
             self.websocket.handle_response(deflate_msg({'event':CLOSING,
                 'log':pyaxellib2.pyaxel_print(self.axel)}))
 
-    def quit(self, args):
+    def quit(self, request):
         self.close()
 
     def update(self):
