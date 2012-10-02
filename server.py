@@ -22,7 +22,7 @@ SRV_SRC_VERSION = '1.1.0'
 (ACCEPTED, CREATED, CLOSING, BAD_REQUEST, RESERVED) = range(100, 105)
 
 # channel_c command inputs
-(IDENT, START, STOP, ABORT, QUIT) = range(6)
+(IDENT, START, STOP, ABORT, QUIT) = range(5)
 
 
 class StateMachineError(Exception):
@@ -115,19 +115,21 @@ class channel_c:
         for p in prefs:
             setattr(conf, p, prefs[p])
 
-        if 'url' in args:
+        if 'select' not in args:
+            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST}))
+            self.state.start('listening')
+
+        if 'download' == args['select']:
             self.server.add_websocket_channel(self)
             self.axel = pyaxellib2.pyaxel_new(conf, args.get('url'), args.get('metadata'))
             self.websocket.handle_response(deflate_msg({'event':CREATED,
                 'log':pyaxellib2.pyaxel_print(self.axel)}))
-        elif 'validate' in args:
-            self.server.add_websocket_channel(self)
-            pyaxellib2.pyaxel_checksum(self.axel, args.get('checksum'), args.get('type'))
-            self.websocket.handle_response(deflate_msg({'event':RESERVED,
-                'log':pyaxellib2.pyaxel_print(self.axel)}))
-        else:
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST}))
-            self.state.start('listening')
+        elif 'validate' == args['select']:
+            if self.axel:
+                self.server.add_websocket_channel(self)
+                pyaxellib2.pyaxel_checksum(self.axel, args.get('checksum'), args.get('type'))
+                self.websocket.handle_response(deflate_msg({'event':RESERVED,
+                    'log':pyaxellib2.pyaxel_print(self.axel)}))
 
     def stop(self, args):
         if self.axel:
