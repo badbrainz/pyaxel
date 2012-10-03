@@ -19,10 +19,10 @@ import pyaxel2 as pyaxellib2
 SRV_SRC_VERSION = '1.1.0'
 
 # channel_c reply codes
-(ACCEPTED, CREATED, CLOSING, BAD_REQUEST, RESERVED) = range(100, 105)
+(CREATED, CLOSING, BAD_REQUEST, RESERVED) = range(100, 104)
 
 # channel_c command inputs
-(IDENT, START, STOP, ABORT, QUIT) = range(5)
+(START, STOP, ABORT, QUIT) = range(4)
 
 
 class StateMachineError(Exception):
@@ -76,14 +76,13 @@ class channel_c:
         self.server = server
         self.websocket = websocket.AsyncChat(sock, self)
         self.state = chanstate_c()
-        self.state.add('initial', IDENT, 'listening', self.ident)
         self.state.add('listening', START, 'established', self.start)
         self.state.add('listening', ABORT, 'listening', self.abort)
         self.state.add('listening', QUIT, 'listening', self.quit)
         self.state.add('established', STOP, 'listening', self.stop)
         self.state.add('established', ABORT, 'listening', self.abort)
         self.state.add('established', QUIT, 'listening', self.quit)
-        self.state.start('initial')
+        self.state.start('listening')
 
     def chat_message(self, msg):
         try:
@@ -98,14 +97,6 @@ class channel_c:
 
     def chat_closed(self):
         self.close()
-
-    def ident(self, request):
-        if request.get('type') == 'ECHO':
-            self.websocket.handle_response(request.get('msg'))
-            self.close()
-        else:
-            self.websocket.handle_response(deflate_msg({'event':ACCEPTED,
-                'version': SRV_SRC_VERSION}))
 
     def start(self, request):
         conf = pyaxellib.conf_t()
