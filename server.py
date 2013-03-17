@@ -12,14 +12,15 @@ import time
 
 import threadpool
 import websocket
-import pyaxel as pyaxellib
-import pyaxel2 as pyaxellib2
+import pyaxel as pyalib
+import pyaxel2 as pyalib2
 
 
-SRV_SRC_VERSION = '1.1.0'
+__version__ = '1.0.0'
+__author__ = 'wormboy.d@gmail.com'
 
 # channel_c reply codes
-(CREATED, CLOSING, BAD_REQUEST, RESERVED) = range(100, 104)
+(BAD_REQUEST) = range(100, 101)
 
 # channel_c command inputs
 (START, STOP, ABORT, QUIT) = range(4)
@@ -39,35 +40,33 @@ class TransitionError(StateMachineError):
 class chanstate_c:
     def __init__(self):
         self.states = {}
-        self.current_state = None
+        self.current = None
 
     def start(self, state):
-        self.current_state = state
+        self.current = state
 
     def add(self, state, inp, next, action=None):
-        try:
-            self.states[state][inp] = (next, action)
-        except KeyError:
+        if state not in self.states:
             self.states[state] = {}
-            self.states[state][inp] = (next, action)
+        self.states[state][inp] = (next, action)
 
     def execute(self, inp, args=()):
-        if self.current_state not in self.states:
-            raise StateMachineError('invalid state: %s' % self.current_state)
-        state = self.states[self.current_state]
+        if self.current not in self.states:
+            raise StateMachineError('invalid state: %s' % self.current)
+        state = self.states[self.current]
         if inp in state:
             next, action = state[inp]
             if action is not None:
                 action(args)
-            self.current_state = next
+            self.current = next
         else:
             if None in state:
                 next, action = state[None]
                 if action is not None:
                     action(args)
-                self.current_state = next
+                self.current = next
             else:
-                raise TransitionError(self.current_state, inp, 'input not recognized')
+                raise TransitionError(self.current, inp, 'input not recognized')
 
 
 class channel_c:
@@ -88,10 +87,8 @@ class channel_c:
         try:
             msg = inflate_msg(msg)
             self.state.execute(msg['cmd'], msg.get('req', {}))
-        except TransitionError, e:
-            resp = '\'%s\' %s <state:%s>' % (e.inp, e.msg, e.cur)
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST,
-                'log':resp}))
+        except TransitionError:
+            self.websocket.handle_response(deflate_msg({'status':BAD_REQUEST}))
         except (StateMachineError, Exception):
             self.close()
 
@@ -99,62 +96,47 @@ class channel_c:
         self.close()
 
     def start(self, request):
-        conf = pyaxellib.conf_t()
-        pyaxellib.conf_init(conf)
-
-        prefs = request.get('conf', {})
-        for p in prefs:
-            setattr(conf, p, prefs[p])
-
-        if 'type' not in request:
-            self.websocket.handle_response(deflate_msg({'event':BAD_REQUEST}))
+        if 'type' not in request or request['type'] not in ('download',):
+            self.websocket.handle_response(deflate_msg({'status':BAD_REQUEST}))
             self.state.start('listening')
             return
 
         if 'download' == request['type']:
+            conf = pyalib.conf_t()
+            pyalib.conf_init(conf)
+            prefs = request.get('conf', {})
+            for p in prefs:
+                setattr(conf, p, prefs[p])
             self.server.add_websocket_channel(self)
-            self.axel = pyaxellib2.pyaxel_new(conf, request.get('url'), request.get('metadata'))
-            self.websocket.handle_response(deflate_msg({'event':CREATED,
-                'log':pyaxellib2.pyaxel_print(self.axel)}))
-        elif 'validate' == request['type']:
-            if self.axel:
-                self.server.add_websocket_channel(self)
-                pyaxellib2.pyaxel_checksum(self.axel, request.get('checksum'), request.get('algorithm'))
-                self.websocket.handle_response(deflate_msg({'event':RESERVED,
-                    'log':pyaxellib2.pyaxel_print(self.axel)}))
+            self.axel = pyalib2.pyaxel_new(conf, request.get('url'), request.get('metadata'))
+            self.websocket.handle_response(deflate_msg(self.axel.msg))
 
     def stop(self, request):
         if self.axel:
             self.server.add_websocket_channel(self)
-            pyaxellib2.pyaxel_stop(self.axel)
-            self.websocket.handle_response(deflate_msg({'event':CLOSING,
-                'log':pyaxellib2.pyaxel_print(self.axel)}))
+            pyalib2.pyaxel_stop(self.axel)
+            self.websocket.handle_response(deflate_msg(self.axel.msg))
 
     def abort(self, request):
         if self.axel:
             self.server.add_websocket_channel(self)
-            pyaxellib2.pyaxel_abort(self.axel)
-            self.websocket.handle_response(deflate_msg({'event':CLOSING,
-                'log':pyaxellib2.pyaxel_print(self.axel)}))
+            pyalib2.pyaxel_abort(self.axel)
+            self.websocket.handle_response(deflate_msg(self.axel.msg))
 
     def quit(self, request):
         self.close()
 
     def update(self):
-        pyaxellib2.pyaxel_do(self.axel)
-        if self.axel.active_threads:
-            if self.axel.msg:
-                self.websocket.handle_response(deflate_msg(self.axel.msg))
-        else:
+        active = pyalib2.pyaxel_do(self.axel)
+        if self.axel.msg:
+            self.websocket.handle_response(deflate_msg(self.axel.msg))
+        if not active:
             self.close(0)
 
     def close(self, status=1000, reason=''):
         if self.websocket.handshaken:
             if self.axel:
-                if self.axel.msg:
-                    self.websocket.handle_response(deflate_msg(self.axel.msg))
-                if self.axel.ready != -1:
-                    pyaxellib2.pyaxel_close(self.axel)
+                pyalib2.pyaxel_close(self.axel)
             if status > 999:
                 self.websocket.disconnect(status, reason)
 
@@ -212,23 +194,26 @@ def inflate_msg(msg):
     return json.loads(msg)
 
 def run(opts={}):
+    sys.stdout.write('PyaxelWS %s\n' % __version__)
+    sys.stdout.write('using pyaxel %s\n' % pyalib.__version__)
+    sys.stdout.write('using pyaxel2 %s\n' % pyalib2.__version__)
+    sys.stdout.write('using websocket %s\n\n' % websocket.__version__)
+
     major, minor, micro, release, serial = sys.version_info
     if (major, minor, micro) < (2, 6, 0):
-        sys.stderr.write('aborting: unsupported python version: %s.%s.%s\n' % \
+        sys.stderr.write('aborting: unsupported Python version: %s.%s.%s\n' % \
             (major, minor, micro))
         return 1
 
     if opts.get('verbose'):
-        pyaxellib.dbg_lvl = 1
+        pyalib.dbg_lvl = 1
 
     server = server_c()
     try:
         server.start_service((opts.get('host', '127.0.0.1'), opts.get('port', 8002)))
-    except socket.error:
-        pass
     except KeyboardInterrupt:
         print
-    except:
+    except Exception, e:
         import debug
         debug.backtrace()
 
@@ -240,8 +225,8 @@ def run(opts={}):
 if __name__ == '__main__':
     from optparse import OptionParser
     usage = 'Usage: %prog [options]'
-    description = 'Note: options will override %s file.' % pyaxellib.PYAXEL_CONFIG
-    parser = OptionParser(usage=usage, description=description, version=SRV_SRC_VERSION)
+    description = 'Note: options will override %s file.' % pyalib.PYAXEL_CONFIG
+    parser = OptionParser(usage=usage, description=description, version=__version__)
     parser.add_option('-a', '--host', dest='host',
                       type='string', default='127.0.0.1',
                       help='change the address of the network interface',
@@ -251,6 +236,8 @@ if __name__ == '__main__':
                       help='change the port to listen on for connections',
                       metavar='PORT')
     parser.add_option('-v', '--verbose', dest='verbose', action='store_true',
-                      help='print HTTP headers to stdout',)
+                      help='print HTTP headers to stdout')
+    parser.add_option('-d', '--debug', dest='debug', action='store_true',
+                      help='print debug info on error')
     opts, args = parser.parse_args()
     sys.exit(run(vars(opts)))

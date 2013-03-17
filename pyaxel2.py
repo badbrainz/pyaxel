@@ -2,8 +2,8 @@
 
 import hashlib
 import math
-import Queue
 import os
+import Queue
 import socket
 import sys
 import stat
@@ -19,12 +19,12 @@ except:
     import pickle
 
 
-PYAXEL_SRC_VERSION = '1.0.0'
+__version__ = '1.0.0'
 
-qfile_map = {}
+fdlock_map = {}
 
-(FOUND, PROCESSING, COMPLETED, INCOMPLETE, STOPPED, INVALID, ERROR,
- VERIFIED) = range(200, 208)
+(FOUND, PROCESSING, COMPLETED, CANCELLED, STOPPED, INVALID, ERROR,
+ VERIFIED, CLOSING, RESERVED, CONNECTING) = range(200, 211)
 
 
 class tokenbucket_c():
@@ -63,26 +63,142 @@ def pyaxel_new(conf, url, metadata=None):
     else:
         pyaxel.url = Queue.deque([url])
 
-    pyaxellib.pyaxel_message(pyaxel, 'Initializing download')
-
     pyaxel.threads = threadpool.ThreadPool(1)
-    pyaxel.threads.addJob(threadpool.JobRequest(initialize_thread, [pyaxel]))
-    pyaxel.active_threads = 1
+    pyaxel.threads.addJob(threadpool.JobRequest(pyaxel_initialize, [pyaxel]))
+    pyaxel.active_jobs = 1
 
-    pyaxel.msg = None
+    pyaxel.ready = -8
+    pyaxel_message(pyaxel)
 
     return pyaxel
 
-def pyaxel_open(pyaxel):
-    pyaxellib.pyaxel_message(pyaxel, 'Opening output file: %s' % pyaxel.file_name)
+def pyaxel_initialize(pyaxel):
+    if not os.path.exists(pyaxel.conf.download_path):
+        pyaxel.ready = -2
+        return (-3, pyaxel)
 
+    if not bool(os.stat(pyaxel.conf.download_path).st_mode & (stat.S_IFDIR|stat.S_IWUSR)):
+        pyaxel.ready = -2
+        return (-3, pyaxel)
+
+    pyaxel.conn = [pyaxellib.conn_t()]
+    pyaxel.conn[0].conf = pyaxel.conf
+
+    for i in xrange(len(pyaxel.url)):
+        url = pyaxel.url.popleft()
+        if not pyaxellib.conn_set(pyaxel.conn[0], url):
+            # could not parse url
+            continue
+
+        if not pyaxellib.conn_init(pyaxel.conn[0]):
+            pyaxellib.pyaxel_error(pyaxel, pyaxel.conn[0].message)
+            continue
+
+        if not pyaxellib.conn_info(pyaxel.conn[0]):
+            pyaxellib.pyaxel_error(pyaxel, pyaxel.conn[0].message)
+            continue
+
+        if pyaxel.conn[0].supported != 1 and len(pyaxel.url) > 0:
+            continue
+
+        pyaxel.url.appendleft(pyaxellib.conn_url(pyaxel.conn[0]))
+        break
+
+    if len(pyaxel.url) == 0:
+        pyaxel.ready = -2
+        return (-2, pyaxel)
+
+    pyaxel.size = pyaxel.conn[0].size
+
+    pyaxel.file_fname = pyaxel.conn[0].disposition or pyaxel.conn[0].file_name
+    pyaxel.file_fname = pyaxel.file_fname.replace('/', '_')
+    pyaxel.file_fname = pyaxellib.http_decode(pyaxel.file_fname) or pyaxel.conf.default_filename
+    pyaxel.file_name = pyaxel.conf.download_path + pyaxel.file_fname
+
+    pyaxel.file_type = pyaxellib.http_header(pyaxel.conn[0].http, 'content-type')
+    if not pyaxel.file_type:
+        pyaxel.file_type = 'application/octet-stream'
+
+    if pyaxel.metadata:
+        pyaxel.verified_progress = 0
+        if 'pieces' in pyaxel.metadata:
+            pyaxel.conf.max_speed = 0 # FIXME
+            pyaxel.conf.buffer_size = pyaxel.metadata['pieces']['length']
+            pyaxel.conf.num_connections = sorted((1, pyaxel.conf.num_connections, len(pyaxel.metadata['pieces']['hashes'])))[1]
+
+    if pyaxel.conf.num_connections > 1:
+        pyaxel.conn.extend([pyaxellib.conn_t() for i in xrange(pyaxel.conf.num_connections - 1)])
+
+    if not pyaxel_open(pyaxel):
+        pyaxellib.pyaxel_error(pyaxel, pyaxel.last_error)
+        pyaxel.ready = -2
+        return (-2, pyaxel)
+
+    fdlock_map[pyaxel.outfd] = threading.Lock()
+
+    pyaxel.ready = -5
+    return (-5, pyaxel)
+
+def pyaxel_configure(pyaxel):
+    for i, conn in enumerate(pyaxel.conn):
+        pyaxellib.conn_set(conn, pyaxel.url[0])
+        pyaxel.url.rotate(-1)
+        conn.conf = pyaxel.conf
+
+    pyaxel.buckets = []
+    if pyaxel.conf.max_speed > 0:
+        speed = pyaxel.conf.max_speed / pyaxel.conf.num_connections
+        for i in xrange(pyaxel.conf.num_connections):
+            pyaxel.buckets.append(tokenbucket_c(speed, speed))
+
+        if pyaxel.conf.max_speed < pyaxel.conf.buffer_size:
+            pyaxel.conf.buffer_size = pyaxel.conf.max_speed
+
+    pyaxel.start_time = time.time()
+    pyaxel.bytes_start = pyaxel.bytes_done
+
+    pyaxel.threads.addWorkers(pyaxel.conf.num_connections - 1)
+    for conn in pyaxel.conn:
+        conn.delay = 0
+        conn.retries = 1
+        conn.reconnect_count = 0
+        conn.start_byte = conn.current_byte
+        if conn.start_byte < conn.last_byte:
+            pyaxel.threads.addJob(threadpool.JobRequest(pyaxel_connect, [conn]))
+            pyaxel.active_jobs += 1
+
+    pyaxel.ready = 0
+    return (-4, pyaxel)
+
+def pyaxel_connect(conn):
+    if pyaxellib.conn_setup(conn):
+        conn.last_transfer = time.time()
+        if pyaxellib.conn_exec(conn):
+            conn.last_transfer = time.time()
+            conn.state = 0
+            conn.enabled = 1
+            return (3, conn)
+
+    pyaxellib.conn_disconnect(conn)
+    conn.state = 0
+    return (1, conn)
+
+def pyaxel_divide(pyaxel):
+    pieces = -(-pyaxel.size / pyaxel.conf.buffer_size)
+    chunks = pieces / pyaxel.conf.num_connections
+    for i in xrange(pyaxel.conf.num_connections):
+        pyaxel.conn[i].first_byte = i * chunks * pyaxel.conf.buffer_size
+        pyaxel.conn[i].current_byte = pyaxel.conn[i].first_byte
+        pyaxel.conn[i].last_byte = (i + 1) * chunks * pyaxel.conf.buffer_size - 1
+    pyaxel.conn[-1].last_byte = pyaxel.size - 1
+
+def pyaxel_open(pyaxel):
     pyaxel.outfd = -1
 
     if not pyaxel.conn[0].supported:
         pyaxellib.pyaxel_message(pyaxel, 'Server unsupported. Starting with one connection.')
         pyaxel.conf.num_connections = 1
         pyaxel.conn = pyaxel.conn[:1]
-        pyaxel_divide(pyaxel)
     else:
         try:
             with open('%s.st' % pyaxel.file_name, 'rb') as fd:
@@ -91,7 +207,7 @@ def pyaxel_open(pyaxel):
                 pyaxel.conf.num_connections = st['num_connections']
 
                 if pyaxel.conf.num_connections > len(pyaxel.conn):
-                    pyaxel.conn.extend([conn_t() for i in xrange(pyaxel.conf.num_connections - len(pyaxel.conn))])
+                    pyaxel.conn.extend([pyaxellib.conn_t() for i in xrange(pyaxel.conf.num_connections - len(pyaxel.conn))])
                 elif pyaxel.conf.num_connections < len(pyaxel.conn):
                     pyaxel.conn = pyaxel.conn[:pyaxel.conf.num_connections]
 
@@ -101,16 +217,12 @@ def pyaxel_open(pyaxel):
                 for conn, byte in zip(pyaxel.conn, st['current_byte']):
                     conn.current_byte = byte
 
-                pyaxellib.pyaxel_message(pyaxel, 'State file found: %d bytes downloaded, %d remaining' %
-                    (pyaxel.bytes_done, pyaxel.size - pyaxel.bytes_done))
-
                 try:
                     flags = os.O_CREAT | os.O_WRONLY
                     if hasattr(os, 'O_BINARY'):
                         flags |= os.O_BINARY
                     pyaxel.outfd = os.open(pyaxel.file_name, flags)
                 except os.error:
-                    pyaxellib.pyaxel_error(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
                     return 0
         except (IOError, EOFError, pickle.UnpicklingError):
             pass
@@ -126,50 +238,38 @@ def pyaxel_open(pyaxel):
             if hasattr(os, 'ftruncate'):
                 os.ftruncate(pyaxel.outfd, pyaxel.size)
         except os.error:
-            pyaxellib.pyaxel_error(pyaxel, 'Error opening local file: %s' % pyaxel.file_name)
             return 0
 
     return 1
-
-def pyaxel_stop(pyaxel):
-    pyaxellib.pyaxel_message(pyaxel, 'Stopping download: %s' % pyaxel.file_name)
-    pyaxel.ready = 2 if pyaxel.ready != 2 else -1
-
-def pyaxel_abort(pyaxel):
-    pyaxellib.pyaxel_message(pyaxel, 'Aborting download: %s' % pyaxel.file_name)
-    pyaxel.ready = 3 if pyaxel.ready != 3 else -1
 
 def pyaxel_do(pyaxel):
     for job in pyaxel.threads.iterProcessedJobs(0):
         state, item = job.result()
         if state == -7:
-            pyaxel.active_threads -= 1
+            pyaxel.active_jobs -= 1
             pyaxellib.pyaxel_message(pyaxel, 'Failed integrity check')
         elif state == -6:
-            pyaxel.active_threads -= 1
-            pyaxellib.pyaxel_message(pyaxel, 'Integrity check successful')
-        elif state == -5: # initialization_thread
-            pyaxellib.pyaxel_message(pyaxel, 'Configuring download')
-            pyaxel.threads.addJob(threadpool.JobRequest(configuration_thread, [pyaxel]))
-        elif state == -4: # configuration_thread
-            pyaxel.active_threads -= 1
-            pyaxellib.pyaxel_message(pyaxel, 'Starting download')
-        elif state == -3: # initialization_thread
-            pyaxel.active_threads -= 1
-            pyaxellib.pyaxel_message(pyaxel, 'Cannot access protected directory: %s' % pyaxel.conf.download_path)
-        elif state in (-2, -1): # configuration_thread
-            pyaxel.active_threads -= 1
+            pyaxel.active_jobs -= 1
+        elif state == -5:
+            pyaxel.threads.addJob(threadpool.JobRequest(pyaxel_configure, [pyaxel]))
+        elif state == -4:
+            pyaxel.active_jobs -= 1
+        elif state == -3:
+            pyaxel.active_jobs -= 1
+            pyaxellib.pyaxel_message(pyaxel, 'Cannot access directory')
+        elif state in (-2, -1):
+            pyaxel.active_jobs -= 1
             pyaxellib.pyaxel_message(pyaxel, 'Could not setup pyaxel')
         elif state == 1:
             pyaxellib.conn_disconnect(item)
             if pyaxel.ready != 0:
-                pyaxel.active_threads -= 1
+                pyaxel.active_jobs -= 1
                 continue
             if item.state == 0 and item.current_byte < item.last_byte:
                 if item.reconnect_count == pyaxel.conf.max_reconnect:
                     if item.retries == len(pyaxel.url):
-                        pyaxellib.pyaxel_message(pyaxel, 'Connection %d error: too many reconnect attempts' % pyaxel.conn.index(item))
-                        pyaxel.active_threads -= 1
+                        pyaxellib.pyaxel_message(pyaxel, 'Connection %d error' % pyaxel.conn.index(item))
+                        pyaxel.active_jobs -= 1
                         continue
                     pyaxellib.conn_set(item, pyaxel.url[0])
                     pyaxel.url.rotate(-1)
@@ -179,41 +279,38 @@ def pyaxel_do(pyaxel):
             pyaxellib.pyaxel_message(pyaxel, 'Connection %d error' % pyaxel.conn.index(item))
             item.last_transfer = time.time()
             item.reconnect_count += 1
-            threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.threads.addJob, [threadpool.JobRequest(setup_thread, [item])]).start()
+            threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.threads.addJob, [threadpool.JobRequest(pyaxel_connect, [item])]).start()
         elif state == 2:
-            pyaxellib.pyaxel_message(pyaxel, 'Connection %d error: local file error' % pyaxel.conn.index(item))
-            pyaxel.active_threads -= 1
+            pyaxellib.pyaxel_message(pyaxel, 'Connection %d error' % pyaxel.conn.index(item))
+            pyaxel.active_jobs -= 1
             pyaxellib.conn_disconnect(item)
         elif state == 3:
             if pyaxel.ready != 0:
-                pyaxel.active_threads -= 1
+                pyaxel.active_jobs -= 1
                 pyaxellib.conn_disconnect(item)
                 continue
             if len(pyaxel.url) > 1 and item.http.status != 206:
                 pyaxellib.conn_disconnect(item)
-                pyaxellib.pyaxel_message(pyaxel, 'Connection %d error: mirror unsupported %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
+                pyaxellib.pyaxel_message(pyaxel, 'Connection %d error: unsupported %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
                 if item.retries == len(pyaxel.url):
                     pyaxellib.pyaxel_message(pyaxel, 'Connection %d error: tried all mirrors' % pyaxel.conn.index(item))
-                    pyaxel.active_threads -= 1
+                    pyaxel.active_jobs -= 1
                     continue
                 pyaxellib.conn_set(item, pyaxel.url[0])
                 pyaxel.url.rotate(-1)
                 item.retries += 1
                 item.reconnect_count = 0
                 item.last_transfer = time.time()
-                pyaxel.threads.addJob(threadpool.JobRequest(setup_thread, [item]))
+                pyaxel.threads.addJob(threadpool.JobRequest(pyaxel_connect, [item]))
                 continue
             pyaxellib.pyaxel_message(pyaxel, 'Connection %d opened: %s' % (pyaxel.conn.index(item), pyaxellib.conn_url(item)))
-            pyaxel.threads.addJob(threadpool.JobRequest(download_thread, [pyaxel, item]))
+            pyaxel.threads.addJob(threadpool.JobRequest(pyaxel_download, [pyaxel, item]))
         elif state == 4:
-            pyaxel.active_threads -= 1
+            pyaxel.active_jobs -= 1
             pyaxellib.conn_disconnect(item)
-            if item.current_byte < item.last_byte:
-                pyaxellib.pyaxel_message(pyaxel, 'Connection %d interrupted' % pyaxel.conn.index(item))
-            else:
-                pyaxellib.pyaxel_message(pyaxel, 'Connection %d finished' % pyaxel.conn.index(item))
+            pyaxellib.pyaxel_message(pyaxel, 'Connection %d closed' % pyaxel.conn.index(item))
         elif state == 5:
-            pyaxel.active_threads -= 1
+            pyaxel.active_jobs -= 1
             pyaxellib.conn_disconnect(item)
             pyaxellib.pyaxel_message(pyaxel, 'Connection %d error: checksum invalid' % pyaxel.conn.index(item))
 
@@ -222,238 +319,81 @@ def pyaxel_do(pyaxel):
             pyaxel_save(pyaxel)
             pyaxel.next_state = time.time() + pyaxel.conf.save_state_interval
 
-        if pyaxel.active_threads:
+        if pyaxel.active_jobs:
             for conn, bucket in zip(pyaxel.conn, pyaxel.buckets):
-                bucket.capacity = pyaxel.conf.max_speed / pyaxel.active_threads
-                bucket.fill_rate = pyaxel.conf.max_speed / pyaxel.active_threads
+                bucket.capacity = pyaxel.conf.max_speed / pyaxel.active_jobs
+                bucket.fill_rate = pyaxel.conf.max_speed / pyaxel.active_jobs
                 if conn.enabled:
                     conn.delay = bucket.consume((conn.current_byte - conn.start_byte) / (time.time() - pyaxel.start_time))
 
         pyaxel.bytes_done = pyaxel.bytes_start + sum([conn.current_byte - conn.start_byte for conn in pyaxel.conn])
-        pyaxel.bytes_per_second = (pyaxel.bytes_done - pyaxel.bytes_start) / (time.time() - pyaxel.start_time) # FIXME should never be float
+        pyaxel.bytes_per_second = (pyaxel.bytes_done - pyaxel.bytes_start) / (time.time() - pyaxel.start_time) # WARN float
         pyaxel.finish_time = pyaxel.start_time + (pyaxel.size - pyaxel.bytes_start) / (pyaxel.bytes_per_second + 1)
 
         if pyaxel.size and pyaxel.bytes_done == pyaxel.size:
             pyaxellib.pyaxel_message(pyaxel, 'Download complete')
             pyaxel.ready = 1
 
+    if pyaxel.ready == 1:
+        if pyaxel.metadata:
+            pyaxellib.pyaxel_message(pyaxel, 'Verifying checksum')
+            pyaxel.threads.addJob(threadpool.JobRequest(pyaxel_validate, [pyaxel]))
+            pyaxel.active_jobs += 1
+            pyaxel.ready = 4
+
     pyaxel_message(pyaxel)
 
-def pyaxel_seek(pyaxel, offset):
-    qfile_map[pyaxel.outfd].put(offset, block=True)
+    return pyaxel.active_jobs
 
-def pyaxel_write(pyaxel, data):
-    os.lseek(pyaxel.outfd, qfile_map[pyaxel.outfd].get(), os.SEEK_SET)
-    os.write(pyaxel.outfd, data)
+def pyaxel_message(pyaxel):
+    pyaxel.msg = None
 
-def pyaxel_close(pyaxel):
-    if pyaxel.outfd in qfile_map:
-        del qfile_map[pyaxel.outfd] # WARN
+    if pyaxel.active_jobs:
+        if pyaxel.ready == 4:
+            pyaxel.msg = {'status':RESERVED}
+            pyaxel.msg['verified_progress'] = pyaxel.verified_progress / pyaxel.size * 100
+        elif pyaxel.ready in (2, 3):
+            pyaxel.msg = {'status':CLOSING}
+        elif pyaxel.ready == -8:
+            pyaxel.msg = {'status': CONNECTING}
+        elif pyaxel.ready == -5:
+            pyaxel.msg = {'status': FOUND}
+            pyaxel.msg['conf'] = vars(pyaxel.conf)
+            pyaxel.msg['name'] = pyaxel.file_fname
+            pyaxel.msg['path'] = pyaxel.file_name
+            pyaxel.msg['type'] = pyaxel.file_type
+            pyaxel.msg['size'] = pyaxel.size
+            pyaxel.msg['chunks'] = [conn.last_byte - conn.first_byte for conn in pyaxel.conn]
+            pyaxel.msg['progress'] = [conn.current_byte - conn.first_byte for conn in pyaxel.conn]
+        elif pyaxel.ready == 0:
+            pyaxel.msg = {'status': PROCESSING}
+            pyaxel.msg['rate'] = format_size(pyaxel.bytes_per_second)
+            pyaxel.msg['progress'] = [conn.current_byte - conn.first_byte for conn in pyaxel.conn]
+    else:
+        if pyaxel.ready in (0, 3, -1):
+            pyaxel.msg = {'status':CANCELLED}
+        elif pyaxel.ready == 1:
+            pyaxel.msg = {'status':COMPLETED}
+        elif pyaxel.ready == 2:
+            pyaxel.msg = {'status':STOPPED}
+        elif pyaxel.ready in (-3, -2):
+            pyaxel.msg = {'status':ERROR}
+        elif pyaxel.ready == -6:
+            pyaxel.msg = {'status':VERIFIED}
+            pyaxel.msg['verified_progress'] = pyaxel.verified_progress / pyaxel.size * 100
+        elif pyaxel.ready == -7:
+            pyaxel.msg = {'status':INVALID}
 
-    for conn in pyaxel.conn:
-        conn.enabled = 0
-
-    if pyaxel.ready in (1, 3, -6, -7):
-        if os.path.exists('%s.st' % pyaxel.file_name):
-            os.remove('%s.st' % pyaxel.file_name)
-        if pyaxel.ready == 3:
-            if os.path.exists(pyaxel.file_name):
-                os.remove(pyaxel.file_name)
-    elif pyaxel.bytes_done > 0 and pyaxel.ready != -1:
-        pyaxel_save(pyaxel)
-
-    if pyaxel.outfd != -1:
-        os.close(pyaxel.outfd)
-        pyaxel.outfd = -1
-    for conn in pyaxel.conn:
-        pyaxellib.conn_disconnect(conn)
-
-def pyaxel_save(pyaxel):
-    if not pyaxel.conn[0].supported:
-        return
-
-    try:
-        with open('%s.st' % pyaxel.file_name, 'wb') as fd:
-            bytes = [conn.current_byte for conn in pyaxel.conn]
-            state = {
-                'num_connections': pyaxel.conf.num_connections,
-                'bytes_done': pyaxel.bytes_start + sum([offset - conn.start_byte for offset, conn in zip(bytes, pyaxel.conn)]),
-                'current_byte': bytes
-            }
-            pickle.dump(state, fd)
-    except IOError:
-        pass
-
-def pyaxel_divide(pyaxel):
-    pieces = -(-pyaxel.size / pyaxel.conf.buffer_size)
-    chunks = pieces / pyaxel.conf.num_connections
-    for i in xrange(pyaxel.conf.num_connections):
-        pyaxel.conn[i].first_byte = i * chunks * pyaxel.conf.buffer_size
-        pyaxel.conn[i].current_byte = pyaxel.conn[i].first_byte
-        pyaxel.conn[i].last_byte = (i + 1) * chunks * pyaxel.conf.buffer_size - 1
-    pyaxel.conn[-1].last_byte = pyaxel.size - 1
-
-def pyaxel_hashrange(pyaxel, conn):
-    hash_list = pyaxel.metadata['pieces']['hashes']
-    hash_type = pyaxel.metadata['pieces']['type']
-    buffer_size = pyaxel.metadata['pieces']['length']
-    for i in xrange(conn.current_byte / buffer_size, -(-(conn.last_byte + 1) / buffer_size)):
-        yield (min(conn.last_byte + 1 - conn.current_byte, buffer_size), hashlib.new(hash_type), hash_list[i])
-
-def pyaxel_checksum(pyaxel, checksum, sum_type):
-    pyaxel.active_threads += 1
-    pyaxel.threads.addJob(threadpool.JobRequest(validate_thread, [pyaxel, checksum, sum_type]))
-    pyaxellib.pyaxel_message(pyaxel, 'Verifying checksum')
+    if pyaxel.conf.verbose:
+        if pyaxel.msg and pyaxel.message:
+            pyaxel.msg['log'] = pyaxel_print(pyaxel)
 
 def pyaxel_print(pyaxel):
     messages = '\n'.join(pyaxel.message)
     del pyaxel.message[:]
     return messages
 
-def pyaxel_message(pyaxel):
-    pyaxel.msg = None
-
-    if pyaxel.active_threads:
-        if pyaxel.ready == -5:
-            pyaxel.msg = {
-                'event': FOUND,
-                'name': pyaxel.file_fname,
-                'path': pyaxel.file_name,
-                'type': pyaxel.file_type,
-                'size': pyaxel.size
-            }
-            if pyaxel.conf.alternate_output == 0:
-                pyaxel.msg['chunks'] = [sum([conn.last_byte - conn.first_byte for conn in pyaxel.conn])]
-                pyaxel.msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in pyaxel.conn])]
-            elif pyaxel.conf.alternate_output == 1:
-                pyaxel.msg['chunks'] = [conn.last_byte - conn.first_byte for conn in pyaxel.conn]
-                pyaxel.msg['progress'] = [conn.current_byte - conn.first_byte for conn in pyaxel.conn]
-        elif pyaxel.ready in (0, 1):
-            pyaxel.msg = {
-                'event': PROCESSING,
-                'rate': format_size(pyaxel.bytes_per_second)
-            }
-            if pyaxel.conf.alternate_output == 0:
-                pyaxel.msg['progress'] = [sum([conn.current_byte - conn.first_byte for conn in pyaxel.conn])]
-            elif pyaxel.conf.alternate_output == 1:
-                pyaxel.msg['progress'] = [conn.current_byte - conn.first_byte for conn in pyaxel.conn]
-    else:
-        if pyaxel.ready in (0, 3, -1):
-            pyaxel.msg = {'event':INCOMPLETE}
-        elif pyaxel.ready == 1:
-            pyaxel.msg = {'event':COMPLETED}
-        elif pyaxel.ready == 2:
-            pyaxel.msg = {"event":STOPPED}
-        elif pyaxel.ready == -2:
-            pyaxel.msg = {'event':ERROR}
-        elif pyaxel.ready == -6:
-            pyaxel.msg = {'event':VERIFIED}
-        elif pyaxel.ready == -7:
-            pyaxel.msg = {'event':INVALID}
-
-    log = pyaxel_print(pyaxel)
-    if pyaxel.conf.verbose:
-        if pyaxel.msg:
-            pyaxel.msg['log'] = log
-
-def initialize_thread(pyaxel):
-    if not bool(os.stat(pyaxel.conf.download_path).st_mode & stat.S_IWUSR):
-        return (-3, pyaxel)
-
-    pyaxel.conn = [pyaxellib.conn_t()]
-    pyaxel.conn[0].conf = pyaxel.conf
-
-    for i in xrange(len(pyaxel.url)):
-        url = pyaxel.url.popleft()
-        if not pyaxellib.conn_set(pyaxel.conn[0], url):
-            pyaxellib.pyaxel_error(pyaxel, 'Could not parse URL: %s' % url)
-            continue
-
-        if not pyaxellib.conn_init(pyaxel.conn[0]):
-            pyaxellib.pyaxel_error(pyaxel, pyaxel.conn[0].message)
-            continue
-
-        if not pyaxellib.conn_info(pyaxel.conn[0]):
-            pyaxellib.pyaxel_error(pyaxel, pyaxel.conn[0].message)
-            continue
-
-        if pyaxel.conn[0].supported != 1 and len(pyaxel.url) > 0:
-            pyaxellib.pyaxel_message(pyaxel, 'Server unsupported: %s' % url)
-            continue
-
-        pyaxel.url.appendleft(pyaxellib.conn_url(pyaxel.conn[0]))
-        break
-
-    if len(pyaxel.url) == 0:
-        pyaxel.ready = -2
-        return (-2, pyaxel)
-
-    pyaxel.size = pyaxel.conn[0].size
-    if pyaxel.size != pyaxellib.INT_MAX:
-        pyaxellib.pyaxel_message(pyaxel, 'File size: %d' % pyaxel.size)
-
-    pyaxel.file_fname = pyaxel.conn[0].disposition or pyaxel.conn[0].file_name
-    pyaxel.file_fname = pyaxel.file_fname.replace('/', '_')
-    pyaxel.file_fname = pyaxellib.http_decode(pyaxel.file_fname) or pyaxel.conf.default_filename
-    pyaxel.file_name = pyaxel.conf.download_path + pyaxel.file_fname
-
-    pyaxel.file_type = pyaxellib.http_header(pyaxel.conn[0].http, 'content-type')
-    if not pyaxel.file_type:
-        pyaxel.file_type = 'application/octet-stream'
-
-    if pyaxel.metadata and 'pieces' in pyaxel.metadata:
-        pyaxel.conf.max_speed = 0 # FIXME
-        pyaxel.conf.buffer_size = pyaxel.metadata['pieces']['length']
-        pyaxel.conf.num_connections = sorted((1, pyaxel.conf.num_connections, len(pyaxel.metadata['pieces']['hashes'])))[1]
-
-    if pyaxel.conf.num_connections > 1:
-        pyaxel.conn.extend([pyaxellib.conn_t() for i in xrange(pyaxel.conf.num_connections - 1)])
-
-    if not pyaxel_open(pyaxel):
-        pyaxellib.pyaxel_error(pyaxel, pyaxel.last_error)
-        pyaxel.ready = -2
-        return (-2, pyaxel)
-
-    qfile_map[pyaxel.outfd] = Queue.Queue(maxsize=1)
-
-    pyaxel.ready = -5
-
-    return (-5, pyaxel)
-
-def configuration_thread(pyaxel):
-    for i, conn in enumerate(pyaxel.conn):
-        pyaxellib.conn_set(conn, pyaxel.url[0])
-        pyaxel.url.rotate(-1)
-        conn.conf = pyaxel.conf
-
-    pyaxel.buckets = []
-    if pyaxel.conf.max_speed > 0:
-        speed = pyaxel.conf.max_speed / pyaxel.conf.num_connections
-        for i in xrange(pyaxel.conf.num_connections):
-            pyaxel.buckets.append(tokenbucket_c(speed, speed))
-
-        if pyaxel.conf.max_speed < pyaxel.conf.buffer_size:
-            pyaxellib.pyaxel_message(pyaxel, 'Buffer resized for this speed')
-            pyaxel.conf.buffer_size = pyaxel.conf.max_speed
-
-    pyaxel.start_time = time.time()
-    pyaxel.bytes_start = pyaxel.bytes_done
-
-    pyaxel.threads.addWorkers(pyaxel.conf.num_connections - 1)
-    for conn in pyaxel.conn:
-        conn.delay = 0
-        conn.retries = 1
-        conn.reconnect_count = 0
-        conn.start_byte = conn.current_byte
-        if conn.start_byte < conn.last_byte:
-            pyaxel.threads.addJob(threadpool.JobRequest(setup_thread, [conn]))
-            pyaxel.active_threads += 1
-
-    pyaxel.ready = 0
-
-    return (-4, pyaxel)
-
-def download_thread(pyaxel, conn):
+def pyaxel_download(pyaxel, conn):
     if pyaxel.metadata and 'pieces' in pyaxel.metadata:
         for buffer_size, hash_obj, checksum in pyaxel_hashrange(pyaxel, conn):
             if pyaxel.ready != 0:
@@ -477,8 +417,7 @@ def download_thread(pyaxel, conn):
                 return (5, conn)
 
             try:
-                pyaxel_seek(pyaxel, conn.current_byte)
-                pyaxel_write(pyaxel, data)
+                pyaxel_write(pyaxel, conn.current_byte, data)
             except IOError:
                 return (2, conn)
 
@@ -501,8 +440,7 @@ def download_thread(pyaxel, conn):
                 return (1, conn)
 
             try:
-                pyaxel_seek(pyaxel, conn.current_byte)
-                pyaxel_write(pyaxel, data)
+                pyaxel_write(pyaxel, conn.current_byte, data)
             except IOError:
                 return (2, conn)
 
@@ -511,37 +449,89 @@ def download_thread(pyaxel, conn):
 
     return (4, conn)
 
-def setup_thread(conn):
-    if pyaxellib.conn_setup(conn):
-        conn.last_transfer = time.time()
-        if pyaxellib.conn_exec(conn):
-            conn.last_transfer = time.time()
-            conn.state = 0
-            conn.enabled = 1
-            return (3, conn)
+def pyaxel_write(pyaxel, offset, data):
+    fdlock_map[pyaxel.outfd].acquire()
+    try:
+        os.lseek(pyaxel.outfd, offset, os.SEEK_SET)
+        os.write(pyaxel.outfd, data)
+    finally:
+        fdlock_map[pyaxel.outfd].release()
 
-    pyaxellib.conn_disconnect(conn)
-    conn.state = 0
-    return (1, conn)
+def pyaxel_save(pyaxel):
+    if not pyaxel.conn[0].supported:
+        return
 
-def validate_thread(pyaxel, checksum, sum_type):
-    if hasattr(hashlib, sum_type):
-        algo = hashlib.new(sum_type)
+    try:
+        with open('%s.st' % pyaxel.file_name, 'wb') as fd:
+            bytes = [conn.current_byte for conn in pyaxel.conn]
+            state = {
+                'num_connections': pyaxel.conf.num_connections,
+                'bytes_done': pyaxel.bytes_start + sum([offset - conn.start_byte for offset, conn in zip(bytes, pyaxel.conn)]),
+                'current_byte': bytes
+            }
+            pickle.dump(state, fd)
+    except IOError:
+        pass
 
-        with open(pyaxel.file_name, 'rb') as fd:
-            fd.seek(0)
-            while True:
-                data = fd.read(2 ** 20)
-                if not data:
-                    break
-                algo.update(data)
+def pyaxel_hashrange(pyaxel, conn):
+    hash_list = pyaxel.metadata['pieces']['hashes']
+    hash_type = pyaxel.metadata['pieces']['type']
+    buffer_size = pyaxel.metadata['pieces']['length']
+    for i in xrange(conn.current_byte / buffer_size, -(-(conn.last_byte + 1) / buffer_size)):
+        yield (min(conn.last_byte + 1 - conn.current_byte, buffer_size), hashlib.new(hash_type), hash_list[i])
 
-        if algo.hexdigest() == checksum:
-            pyaxel.ready = -6
-            return (-6, pyaxel)
+def pyaxel_validate(pyaxel):
+    if 'hash' in pyaxel.metadata:
+        if hasattr(hashlib, pyaxel.metadata['hash']['type']):
+            algo = hashlib.new(pyaxel.metadata['hash']['type'])
+
+            with open(pyaxel.file_name, 'rb') as fd:
+                fd.seek(0)
+                pyaxel.verified_progress = 0
+                while True:
+                    data = fd.read(2 ** 20)
+                    if not data:
+                        break
+                    algo.update(data)
+                    pyaxel.verified_progress += len(data)
+
+            if algo.hexdigest() == pyaxel.metadata['hash']['checksum']:
+                pyaxel.ready = -6
+                return (-6, pyaxel)
 
     pyaxel.ready = -7
     return (-7, pyaxel)
+
+def pyaxel_stop(pyaxel):
+    pyaxel.ready = 2 if pyaxel.ready != 2 else -1
+    pyaxel_message(pyaxel)
+
+def pyaxel_abort(pyaxel):
+    pyaxel.ready = 3 if pyaxel.ready != 3 else -1
+    pyaxel_message(pyaxel)
+
+def pyaxel_close(pyaxel):
+    if pyaxel.ready == -1:
+        return
+
+    if pyaxel.outfd != -1:
+        os.close(pyaxel.outfd)
+        if pyaxel.outfd in fdlock_map:
+            del fdlock_map[pyaxel.outfd] # WARN
+        pyaxel.outfd = -1
+
+    if pyaxel.ready in (1, 3, -6, -7):
+        if os.path.exists('%s.st' % pyaxel.file_name):
+            os.remove('%s.st' % pyaxel.file_name)
+        if pyaxel.ready == 3:
+            if os.path.exists(pyaxel.file_name):
+                os.remove(pyaxel.file_name)
+    elif pyaxel.bytes_done > 0:
+        pyaxel_save(pyaxel)
+
+    for conn in pyaxel.conn:
+        pyaxellib.conn_disconnect(conn)
+        conn.enabled = 0
 
 def format_size(num, prefix=True):
     if num < 1:
@@ -559,7 +549,7 @@ def main(argv=None):
     from optparse import OptionParser
     from optparse import IndentedHelpFormatter
     fmt = IndentedHelpFormatter(indent_increment=4, max_help_position=40, width=77, short_first=1)
-    parser = OptionParser(usage='Usage: %prog [options] url', formatter=fmt, version=PYAXEL_SRC_VERSION)
+    parser = OptionParser(usage='Usage: %prog [options] url', formatter=fmt, version=__version__)
     parser.add_option('-n', '--num-connections', dest='num_connections',
                       type='int', metavar='x',
                       help='maximum number of connections')
@@ -594,9 +584,8 @@ def main(argv=None):
                 setattr(conf, prop, options[prop])
 
         axel = pyaxel_new(conf, args[0] if len(args) == 1 else args)
-        while axel.active_threads:
-            pyaxel_do(axel)
-            if axel.msg and axel.msg['log']:
+        while pyaxel_do(axel):
+            if axel.msg and 'log' in axel.msg:
                 sys.stdout.write(axel.msg['log'])
                 sys.stdout.write('\n')
             if axel.size:

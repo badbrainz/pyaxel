@@ -22,7 +22,7 @@ except:
 from collections import deque
 
 
-PYAXEL_SRC_VERSION = '1.0.0'
+__version__ = '1.0.0'
 
 PYAXEL_PATH = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
 PYAXEL_CONFIG = 'pyaxel.cfg'
@@ -93,6 +93,7 @@ def conf_load(conf, path):
     conf.max_reconnect = int(parser.getopt('max_reconnect', conf.max_reconnect))
     conf.num_connections = int(parser.getopt('num_connections', conf.num_connections))
     conf.reconnect_delay = int(parser.getopt('reconnect_delay', conf.reconnect_delay))
+    conf.referrer = ''
     conf.save_state_interval = int(parser.getopt('save_state_interval', conf.save_state_interval))
     conf.search_top = int(parser.getopt('search_top', conf.search_top))
     conf.user_agent = str(parser.getopt('user_agent', conf.user_agent))
@@ -439,6 +440,9 @@ class conn_t:
 
 
 def conn_set(conn, url):
+    if not url:
+        return 0
+
     parts = urlparse.urlparse(url)
 
     if not parts.netloc:
@@ -468,8 +472,8 @@ def conn_set(conn, url):
         conn.directory += '/'
         if conn.proto == PROTO_HTTP:
             conn.directory = http_decode(conn.directory)
-        if not conn.file_name:
-            return 0
+        #if not conn.file_name:
+        #    return 0
         if parts.query:
             conn.query = '?' + parts.query
 
@@ -550,6 +554,8 @@ def conn_setup(conn):
     http_setup(conn.http, s)
     http_addheader(conn.http, 'User-Agent', conn.conf.user_agent)
     http_addheader(conn.http, 'Accept-Encoding', 'gzip,deflate,sdch')
+    if conn.conf.referrer:
+        http_addheader(conn.http, 'Referer', conn.conf.referrer)
     if conn.last_byte:
         http_addheader(conn.http, 'Range', 'bytes=%d-%d' % (conn.current_byte, conn.last_byte))
     else:
@@ -631,6 +637,10 @@ def http_exec(http):
         http.headers = str(e.reason)
         http.status = None
         return 0
+    except Exception, e:
+        http.headers = str(e)
+        http.status = None
+        return 0
 
     return 1
 
@@ -691,7 +701,7 @@ def main(argv=None):
     from optparse import OptionParser
     from optparse import IndentedHelpFormatter
     fmt = IndentedHelpFormatter(indent_increment=4, max_help_position=40, width=77, short_first=1)
-    parser = OptionParser(usage='Usage: %prog [options] url[+]', formatter=fmt, version=PYAXEL_SRC_VERSION)
+    parser = OptionParser(usage='Usage: %prog [options] url[+]', formatter=fmt, version=__version__)
     parser.add_option('-n', '--num-connections', dest='num_connections',
                       type='int', metavar='x',
                       help='maximum number of connections')
@@ -756,7 +766,7 @@ def main(argv=None):
         axel.file_name = conf.download_path + axel.file_name
 
         # TODO check permissions, destination opt, etc.
-        if not bool(os.stat(conf.download_path).st_mode & stat.S_IWUSR):
+        if not bool(os.stat(conf.download_path).st_mode & (stat.S_IFDIR|stat.S_IWUSR)):
             print 'Can\'t access protected directory: %s' % conf.download_path
             return 1
 

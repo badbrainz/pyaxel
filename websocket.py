@@ -5,8 +5,11 @@ import base64
 import array
 
 
+__version__ = '1.0.0'
+
+
 class AsyncChat(asynchat.async_chat):
-    """this class implements version 13 of the WebSocket protocol,
+    """this implements version 13 of the WebSocket protocol,
     http://tools.ietf.org/html/rfc6455.
     specs:
         - unicode text framing
@@ -147,8 +150,8 @@ class AsyncChat(asynchat.async_chat):
 
     def handle_close(self):
         self.close()
-        self._cleanup()
         self.handler.chat_closed()
+        self._cleanup()
 
     def handle_error(self):
         if hasattr(self, 'last_error'):
