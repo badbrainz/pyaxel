@@ -9,35 +9,18 @@ __version__ = '1.0.0'
 
 
 class AsyncChat(asynchat.async_chat):
-    """this implements version 13 of the WebSocket protocol,
-    http://tools.ietf.org/html/rfc6455.
-    specs:
-        - unicode text framing
+    """this class implements version 13 of the WebSocket protocol,
+    http://tools.ietf.org/html/rfc6455
     """
 
-    def __init__(self, sock, handler):
+    def __init__(self, sock, reciever):
         asynchat.async_chat.__init__(self, sock)
-        self.handler = handler
-        self.in_buffer = []
-        self.payload_buffer = []
+        self.reciever = reciever
+        self.input_buffer = []
+        self.output_buffer = []
         self.handshaken = False
         self.state = self.parse_request_header
         self.set_terminator('\x0D\x0A\x0D\x0A')
-
-    def handle_response(self, msg, opcode=0x01):
-        if not self.handshaken:
-            return
-
-        header = chr(0x80 | opcode)
-        # no fragmentation
-        length = len(msg)
-        if length <= 0x7D:
-            header += chr(length)
-        elif length <= 0xFFFF:
-            header += struct.pack('>BH', 0x7E, length)
-        else:
-            header += struct.pack('>BQ', 0x7F, length)
-        self.push(header + msg)
 
     def parse_request_header(self, data):
         crlf = '\x0D\x0A'
@@ -95,8 +78,8 @@ class AsyncChat(asynchat.async_chat):
         else:
             if not control:
                 if opcode == 0x01:
+                    # no interleave
                     if self.frame_header:
-                        # no interleave
                         self.last_error = (1003, 'unsupported message format')
                         self.handle_error()
                         return
@@ -132,46 +115,65 @@ class AsyncChat(asynchat.async_chat):
         bytes = array.array('B', data)
         mask = array.array('B', self.frame_header[3])
         bytes = [chr(b ^ mask[i % 4]) for i, b in enumerate(bytes)]
-        self.payload_buffer.extend(bytes)
+        self.output_buffer.extend(bytes)
         if self.frame_header[0]:
-            msg = ''.join(self.payload_buffer)
-            del self.payload_buffer[:]
+            msg = ''.join(self.output_buffer)
+            del self.output_buffer[:]
             del self.frame_header
-            self.handler.chat_message(msg)
+            self.reciever.chat_message(msg)
         self.set_terminator(2)
         self.state = self.parse_frame_header
 
     def collect_incoming_data(self, data):
-        self.in_buffer.append(data)
+        self.input_buffer.append(data)
 
     def found_terminator(self):
-        self.state(''.join(self.in_buffer))
-        del self.in_buffer[:]
+        self.state(''.join(self.input_buffer))
+        del self.input_buffer[:]
 
     def handle_close(self):
         self.close()
-        self.handler.chat_closed()
+        self.reciever.chat_closed()
         self._cleanup()
 
     def handle_error(self):
         if hasattr(self, 'last_error'):
             status, reason = self.last_error
             msg = struct.pack('>H%ds' % len(reason), status, reason)
-            self.handle_response(msg, 0x08)
+            self.send_message(msg, 0x08)
         self.handle_close()
 
-    def disconnect(self, status=1000, reason=''):
-        if self.handshaken:
-            msg = struct.pack('>H%ds' % len(reason), status, reason)
-            self.handle_response(msg, 0x08)
-            self.close()
-            self._cleanup()
-
     def _cleanup(self):
-        del self.payload_buffer[:]
-        del self.in_buffer[:]
+        del self.output_buffer[:]
+        del self.input_buffer[:]
         if hasattr(self, 'last_error'):
             del self.last_error
         if hasattr(self, 'frame_header'):
             del self.frame_header
         self.handshaken = False
+
+    # frontend
+    
+    def send_message(self, msg, opcode=0x01):
+        if not self.handshaken:
+            return
+
+        header = chr(0x80 | opcode)
+        length = len(msg)
+        if length <= 0x7D:
+            header += chr(length)
+        elif length <= 0xFFFF:
+            header += struct.pack('>BH', 0x7E, length)
+        else:
+            header += struct.pack('>BQ', 0x7F, length)
+        self.push(header + msg)
+        
+    def disconnect(self, status=1000, reason=''):
+        if not self.handshaken:
+            return
+
+        msg = struct.pack('>H%ds' % len(reason), status, reason)
+        self.send_message(msg, 0x08)
+        self.close()
+        self._cleanup()
+
