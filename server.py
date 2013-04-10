@@ -81,69 +81,56 @@ class channel_c:
         self.state.add('established', QUIT, 'listening', self.quit)
         self.state.start('listening')
 
-    def chat_message(self, msg):
+    def channel_message(self, msg):
         try:
-            msg = inflate_msg(msg)
+            msg = inflate_message(msg)
             self.state.execute(msg['cmd'], msg.get('req', {}))
         except TransitionError:
-            self.websocket.send_message(deflate_msg({'status':BAD_REQUEST}))
+            self.websocket.send_message(deflate_message({'status':BAD_REQUEST}))
         except (StateMachineError, Exception):
             self.close()
 
-    def chat_closed(self):
+    def channel_closed(self):
         self.close()
 
     def start(self, request):
-        if 'type' not in request or request['type'] not in ('download',):
-            self.websocket.send_message(deflate_msg({'status':BAD_REQUEST}))
-            self.state.start('listening')
-            return
-
-        if 'download' == request['type']:
-            conf = pyalib.conf_t()
-            pyalib.conf_init(conf)
-            prefs = request.get('conf', {})
-            for p in prefs:
-                setattr(conf, p, prefs[p])
-            self.server.add_client(self)
-            self.axel = pyalib2.pyaxel_new(conf, request.get('url'), request.get('metadata'))
-            pyalib2.pyaxel_status(self.axel)
-            self.websocket.send_message(deflate_msg(self.axel.status))
+        conf = pyalib.conf_t()
+        pyalib.conf_init(conf)
+        prefs = request.get('conf', {})
+        for p in prefs:
+            setattr(conf, p, prefs[p])
+        self.server.add_client(self)
+        self.axel = pyalib2.pyaxel_new(conf, request.get('url'), request.get('metadata'))
+        self.websocket.send_message(deflate_message(pyalib2.pyaxel_status(self.axel)))
 
     def stop(self, request):
-        if self.axel:
-            self.server.add_client(self)
-            pyalib2.pyaxel_stop(self.axel)
-            pyalib2.pyaxel_status(self.axel)
-            self.websocket.send_message(deflate_msg(self.axel.status))
+        self.server.add_client(self)
+        pyalib2.pyaxel_stop(self.axel)
+        self.websocket.send_message(deflate_message(pyalib2.pyaxel_status(self.axel)))
 
     def abort(self, request):
-        if self.axel:
-            self.server.add_client(self)
-            pyalib2.pyaxel_abort(self.axel)
-            pyalib2.pyaxel_status(self.axel)
-            self.websocket.send_message(deflate_msg(self.axel.status))
+        self.server.add_client(self)
+        pyalib2.pyaxel_abort(self.axel)
+        self.websocket.send_message(deflate_message(pyalib2.pyaxel_status(self.axel)))
 
     def quit(self, request):
         self.close()
 
     def update(self):
         pyalib2.pyaxel_do(self.axel)
-        pyalib2.pyaxel_status(self.axel)
-        if self.axel.status:
-            self.websocket.send_message(deflate_msg(self.axel.status))
-        if not self.axel.running:
+        status = pyalib2.pyaxel_status(self.axel)
+        if status:
+            self.websocket.send_message(deflate_message(status))
+        if not pyalib2.pyaxel_processes(self.axel):
             self.close(0)
+            self.state.start('listening')
 
     def close(self, status=1000, reason=''):
-        if self.websocket.handshaken:
-            if self.axel:
-                pyalib2.pyaxel_close(self.axel)
-            if status > 999:
-                self.websocket.disconnect(status, reason)
-
+        if self.axel:
+            pyalib2.pyaxel_close(self.axel)
+        if status > 999:
+            self.websocket.disconnect(status, reason)
         self.server.remove_client(self)
-        self.state.start('listening')
 
 
 class server_c(asyncore.dispatcher):
@@ -189,15 +176,15 @@ class server_c(asyncore.dispatcher):
             self.clients.remove(client)
 
 
-def deflate_msg(msg):
+def deflate_message(msg):
     return json.dumps(msg, separators=(',',':'))
 
-def inflate_msg(msg):
+def inflate_message(msg):
     return json.loads(msg)
 
 def run(opts={}):
-    sys.stdout.write('PyaxelWS %s\n' % __version__)
-    sys.stdout.write('modules: pyaxel-%s, pyaxel2-%s, websocket-%s\n' % 
+    sys.stdout.write('PyaxelWS-%s\n' % __version__)
+    sys.stdout.write('pyaxel-%s pyaxel2-%s websocket-%s\n' %
         (pyalib.__version__, pyalib2.__version__, websocket.__version__))
 
     major, minor, micro, release, serial = sys.version_info

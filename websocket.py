@@ -120,7 +120,7 @@ class AsyncChat(asynchat.async_chat):
             msg = ''.join(self.output_buffer)
             del self.output_buffer[:]
             del self.frame_header
-            self.reciever.chat_message(msg)
+            self.reciever.channel_message(msg)
         self.set_terminator(2)
         self.state = self.parse_frame_header
 
@@ -133,7 +133,7 @@ class AsyncChat(asynchat.async_chat):
 
     def handle_close(self):
         self.close()
-        self.reciever.chat_closed()
+        self.reciever.channel_closed()
         self._cleanup()
 
     def handle_error(self):
@@ -153,7 +153,7 @@ class AsyncChat(asynchat.async_chat):
         self.handshaken = False
 
     # frontend
-    
+
     def send_message(self, msg, opcode=0x01):
         if not self.handshaken:
             return
@@ -167,7 +167,7 @@ class AsyncChat(asynchat.async_chat):
         else:
             header += struct.pack('>BQ', 0x7F, length)
         self.push(header + msg)
-        
+
     def disconnect(self, status=1000, reason=''):
         if not self.handshaken:
             return
@@ -176,4 +176,3 @@ class AsyncChat(asynchat.async_chat):
         self.send_message(msg, 0x08)
         self.close()
         self._cleanup()
-
