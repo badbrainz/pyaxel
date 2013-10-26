@@ -3,12 +3,15 @@
 import sys, os, time, atexit
 from signal import SIGTERM
 
+DEVNULL = os.devnull if (hasattr(os, "devnull")) else "/dev/null"
+
 class Daemon:
     """
     A generic daemon class.
     See also: http://www.jejik.com/articles/2007/02/a_simple_unix_linux_daemon_in_python/
     """
-    def __init__(self, pidfile, stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
+
+    def __init__(self, pidfile, stdin=DEVNULL, stdout=DEVNULL, stderr=DEVNULL):
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
@@ -128,22 +131,27 @@ class Daemon:
 
 
 if __name__ == "__main__":
+    if sys.platform.startswith('win'):
+        print 'aborting: unsupported platform:', sys.platform
+        sys.exit(2)
+
     from server import run
-    daemon = Daemon(pidfile='/tmp/pyaxelws.pid', stdout='/tmp/pyaxelws.log')
+    daemon = Daemon(pidfile='/tmp/pyaxelws.pid', stdout='/tmp/pyaxelws.log',
+        stderr='/tmp/pyaxelws.log')
     daemon.run = run
-	if len(sys.argv) == 2:
-		if 'start' == sys.argv[1]:
-			daemon.start()
-		elif 'stop' == sys.argv[1]:
-			daemon.stop()
-		elif 'status' == sys.argv[1]:
-			daemon.status()
-		elif 'restart' == sys.argv[1]:
-			daemon.restart()
-		else:
-			print "Unknown command"
-			sys.exit(2)
-		sys.exit(0)
-	else:
-		print "usage: %s start|stop|status|restart" % sys.argv[0]
-		sys.exit(2)
+    if len(sys.argv) == 2:
+        if 'start' == sys.argv[1]:
+            daemon.start()
+        elif 'stop' == sys.argv[1]:
+            daemon.stop()
+        elif 'status' == sys.argv[1]:
+            daemon.status()
+        elif 'restart' == sys.argv[1]:
+            daemon.restart()
+        else:
+            print "Unknown command"
+            sys.exit(2)
+        sys.exit(0)
+    else:
+        print "usage: %s start|stop|status|restart" % sys.argv[0]
+        sys.exit(2)
