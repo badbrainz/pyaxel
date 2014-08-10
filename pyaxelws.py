@@ -10,21 +10,157 @@ import stat
 import time
 import threading
 
-import threadpool
-import pyaxel as pyalib
-
 try:
     import cPickle as pickle
 except:
     import pickle
 
+import pyaxel as pyalib
 
-__version__ = '1.0.0'
+
+__version__ = '1.2.0'
 
 fdlock_map = {}
 
 [FOUND, PROCESSING, COMPLETED, CANCELLED, STOPPED, INVALID, ERROR,
  VERIFIED, CLOSING, RESERVED, CONNECTING] = range(200, 211)
+
+
+## {{{ http://code.activestate.com/recipes/502291/ (r4)
+def synchronized(f):
+    def wrapper(self, *args, **kwargs):
+        try: lock = self.__lock
+        except AttributeError: # first time use
+            lock = self.__dict__.setdefault('__lock', threading.RLock())
+        lock.acquire()
+        try: return f(self, *args, **kwargs)
+        finally: lock.release()
+    return wrapper
+
+
+class ThreadPool(object):
+    def __init__(self, num_workers, input_queue_size=0, output_queue_size=0):
+        self._workers = []
+        self._activeKey2Job = {}
+        self._unassignedKey2Job = {}
+        self._unassignedJobs = Queue.Queue(input_queue_size)
+        self._processedJobs = Queue.Queue(output_queue_size)
+        self.addWorkers(num_workers)
+
+    @synchronized
+    def addWorkers(self, n=1):
+        for _ in xrange(n):
+            self._workers.append(Worker(self._unassignedJobs, self._processedJobs,
+                                        self._unassignedKey2Job))
+
+    @synchronized
+    def dismissWorkers(self, n=1):
+        for _ in xrange(n):
+            try: self._workers.pop().dismissed = True
+            except IndexError: break
+
+    @synchronized
+    def addJob(self, job, timeout=None):
+        key = job.key
+        self._unassignedKey2Job[key] = self._activeKey2Job[key] = job
+        self._unassignedJobs.put(job, timeout is None or timeout>0, timeout)
+
+    @synchronized
+    def cancelJob(self, key):
+        try:
+            del self._unassignedKey2Job[key]
+            # if it's not in unassigned, it may be in progress or already
+            # processed; don't try to delete it from active
+            del self._activeKey2Job[key]
+        except KeyError: pass
+
+    @synchronized
+    def cancelAllJobs(self):
+        while self._unassignedKey2Job:
+            del self._activeKey2Job[self._unassignedKey2Job.popitem()[0]]
+
+    def numActiveJobs(self):
+        return len(self._activeKey2Job)
+
+    def iterProcessedJobs(self, timeout=None):
+        block = timeout is None or timeout>0
+        while self._activeKey2Job:
+            try: job = self._processedJobs.get(block, timeout)
+            except Queue.Empty:
+                break
+            key = job.key
+            # at this point the key is guaranteed to be in _activeKey2Job even
+            # if the job has been cancelled
+            assert key in self._activeKey2Job
+            del self._activeKey2Job[key]
+            yield job
+
+    def processedJobs(self, timeout=None):
+        if timeout is None or timeout <= 0:
+            return list(self.iterProcessedJobs(timeout))
+        now = time.time
+        end = now() + timeout
+        processed = []
+        while timeout > 0:
+            try: processed.append(self.iterProcessedJobs(timeout).next())
+            except StopIteration: break
+            timeout = end - now()
+        return processed
+
+
+class JobRequest(object):
+    class UnprocessedRequestError(Exception):
+        pass
+
+    def __init__(self, callable, args=(), kwds=None, key=None):
+        if kwds is None: kwds = {}
+        if key is None: key = id(self)
+        for attr in 'callable', 'args', 'kwds', 'key':
+            setattr(self, attr, eval(attr))
+        self._exc_info = None
+
+    def process(self):
+        try:
+            self._result = self.callable(*self.args, **self.kwds)
+        except:
+            self._exc_info = sys.exc_info()
+        else:
+            self._exc_info = None
+
+    def result(self):
+        if self._exc_info is not None:
+            tp,exception,trace = self._exc_info
+            raise tp,exception,trace
+        try: return self._result
+        except AttributeError:
+            raise self.UnprocessedRequestError
+
+
+class Worker(threading.Thread):
+    def __init__(self, inputQueue, outputQueue, unassignedKey2Job, **kwds):
+        super(Worker,self).__init__(**kwds)
+        self.setDaemon(True)
+        self._inputQueue = inputQueue
+        self._outputQueue = outputQueue
+        self._unassignedKey2Job = unassignedKey2Job
+        self.dismissed = False
+        self.start()
+
+    def run(self):
+        while True:
+            # thread blocks here if inputQueue is empty
+            job = self._inputQueue.get()
+            key = job.key
+            try: del self._unassignedKey2Job[key]
+            except KeyError:
+                continue
+            if self.dismissed: # put back the job we just picked up and exit
+                self._inputQueue.put(job)
+                break
+            job.process()
+            # thread blocks here if outputQueue is full
+            self._outputQueue.put(job)
+## end of http://code.activestate.com/recipes/502291/ }}}
 
 
 class tokenbucket_c():
@@ -63,8 +199,8 @@ def pyaxel_new(conf, url, metadata=None):
     else:
         pyaxel.url = Queue.deque([url])
 
-    pyaxel.pool = threadpool.ThreadPool(1)
-    pyaxel.pool.addJob(threadpool.JobRequest(pyaxel_initialize, [pyaxel]))
+    pyaxel.pool = ThreadPool(1)
+    pyaxel.pool.addJob(JobRequest(pyaxel_initialize, [pyaxel]))
 
     pyaxel.ready = -8
 
@@ -109,10 +245,9 @@ def pyaxel_initialize(pyaxel):
     pyaxel.size = pyaxel.conn[0].size
 
     pyaxel.file_fname = pyaxel.conn[0].disposition or pyaxel.conn[0].file_name
-    pyaxel.file_fname = pyaxel.file_fname.replace('/', '_')
     pyaxel.file_fname = pyalib.http_decode(pyaxel.file_fname) or pyaxel.conf.default_filename
+    pyaxel.file_fname = pyaxel.file_fname.replace('/', '_')
     pyaxel.file_name = pyaxel.conf.download_path + pyaxel.file_fname
-
     pyaxel.file_type = pyalib.http_header(pyaxel.conn[0].http, 'content-type')
     if not pyaxel.file_type:
         pyaxel.file_type = 'application/octet-stream'
@@ -162,7 +297,7 @@ def pyaxel_configure(pyaxel):
         conn.reconnect_count = 0
         conn.start_byte = conn.current_byte
         if conn.start_byte < conn.last_byte:
-            pyaxel.pool.addJob(threadpool.JobRequest(pyaxel_connect, [conn]))
+            pyaxel.pool.addJob(JobRequest(pyaxel_connect, [conn]))
 
     pyaxel.ready = 0
     return (-4, pyaxel)
@@ -247,7 +382,7 @@ def pyaxel_do(pyaxel):
         elif status == -6:
             pyalib.pyaxel_message(pyaxel, 'Passed integrity check')
         elif status == -5:
-            pyaxel.pool.addJob(threadpool.JobRequest(pyaxel_configure, [pyaxel]))
+            pyaxel.pool.addJob(JobRequest(pyaxel_configure, [pyaxel]))
         elif status == -4: # pyaxel_configure
             pass
         elif status == -3:
@@ -271,7 +406,7 @@ def pyaxel_do(pyaxel):
             pyalib.pyaxel_message(pyaxel, 'Connection %d error' % pyaxel.conn.index(item))
             item.last_transfer = time.time()
             item.reconnect_count += 1
-            threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.pool.addJob, [threadpool.JobRequest(pyaxel_connect, [item])]).start()
+            threading.Timer(pyaxel.conf.reconnect_delay, pyaxel.pool.addJob, [JobRequest(pyaxel_connect, [item])]).start()
         elif status == 2:
             pyalib.pyaxel_message(pyaxel, 'Connection %d error' % pyaxel.conn.index(item))
             pyalib.conn_disconnect(item)
@@ -290,13 +425,13 @@ def pyaxel_do(pyaxel):
                 item.retries += 1
                 item.reconnect_count = 0
                 item.last_transfer = time.time()
-                pyaxel.pool.addJob(threadpool.JobRequest(pyaxel_connect, [item]))
+                pyaxel.pool.addJob(JobRequest(pyaxel_connect, [item]))
                 continue
             pyalib.pyaxel_message(pyaxel, 'Connection %d opened: %s' % (pyaxel.conn.index(item), pyalib.conn_url(item)))
             if pyaxel.metadata and 'pieces' in pyaxel.metadata:
-                pyaxel.pool.addJob(threadpool.JobRequest(pyaxel_piecewise_download, [pyaxel, item]))
+                pyaxel.pool.addJob(JobRequest(pyaxel_piecewise_download, [pyaxel, item]))
             else:
-                pyaxel.pool.addJob(threadpool.JobRequest(pyaxel_download, [pyaxel, item]))
+                pyaxel.pool.addJob(JobRequest(pyaxel_download, [pyaxel, item]))
         elif status == 4:
             pyalib.conn_disconnect(item)
             pyalib.pyaxel_message(pyaxel, 'Connection %d closed' % pyaxel.conn.index(item))
@@ -328,7 +463,7 @@ def pyaxel_do(pyaxel):
     if pyaxel.ready == 1:
         if pyaxel.metadata and 'hash' in pyaxel.metadata:
             pyalib.pyaxel_message(pyaxel, 'Verifying checksum')
-            pyaxel.pool.addJob(threadpool.JobRequest(pyaxel_validate, [pyaxel]))
+            pyaxel.pool.addJob(JobRequest(pyaxel_validate, [pyaxel]))
             pyaxel.ready = 4
 
 def pyaxel_processes(pyaxel):
@@ -589,9 +724,8 @@ def main(argv=None):
         print
         return 1
     except:
-        import debug
-        debug.backtrace()
-        return 1
+        print 'Unknown error!'
+        return 2
 
     return 0
 
