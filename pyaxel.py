@@ -22,7 +22,7 @@ except:
 from collections import deque
 
 
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 
 PYAXEL_PATH = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
 PYAXEL_CONFIG = 'pyaxel.cfg'
@@ -159,8 +159,8 @@ def pyaxel_new(conf, count, url):
         return pyaxel
 
     pyaxel.file_name = pyaxel.conn[0].disposition or pyaxel.conn[0].file_name
+    pyaxel.file_name = http_decode(pyaxel.file_name) or pyaxel.conf.default_filename
     pyaxel.file_name = pyaxel.file_name.replace('/', '_')
-    pyaxel.file_name = http_decode(pyaxel.file_name) or conf.default_filename
 
     s = conn_url(pyaxel.conn[0])
     pyaxel.url[0] = s
@@ -521,13 +521,12 @@ def conn_info(conn):
     conn.disposition = http_header(conn.http, 'content-disposition')
     if conn.disposition:
         conn.disposition = conn.disposition.split('filename=')
-        if len(conn.disposition) == 2 and conn.disposition[1].startswith(('"','\'')):
+        if len(conn.disposition) == 2 and conn.disposition[1].startswith(('"',"'")):
             conn.disposition = conn.disposition[1][1:-1]
         else:
             conn.disposition = None
 
-    # TODO check transfer-encoding
-    conn.size = int(http_header(conn.http, 'content-length') or 0)
+    conn.size = http_size(conn.http)
     if conn.http.status in (200, 206) and conn.size > 0:
         if conn.http.status == 206:
             conn.supported = 1
@@ -649,6 +648,14 @@ def http_disconnect(http):
         http.fd.close()
         http.fd = None
 
+def http_size(http):
+    size = int(http_header(http, 'content-length') or 0)
+    if (size == 0 and http_header(http, 'transfer-encoding') == 'chunked'):
+        bounds = http_header(http, 'content-range')
+        if bounds:
+            size = int(bounds.split(' ')[-1].split('/')[-1])
+    return size
+
 def http_decode(s):
     # safe='%/:=&?~#+!$,;'@()*[]|'
     return urllib.unquote_plus(s)
@@ -767,7 +774,7 @@ def main(argv=None):
 
         # TODO check permissions, destination opt, etc.
         if not bool(os.stat(conf.download_path).st_mode & (stat.S_IFDIR|stat.S_IWUSR)):
-            print 'Can\'t access protected directory: %s' % conf.download_path
+            print "Can't access protected directory: %s" % conf.download_path
             return 1
 
         if not pyaxel_open(axel):
