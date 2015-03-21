@@ -461,7 +461,7 @@ def run(opts={}):
 
     server = Server()
     try:
-        server.start_service((opts.get('host', '127.0.0.1'), opts.get('port', 8002)))
+        server.start_service((opts.get('host'), opts.get('port')))
     except KeyboardInterrupt:
         print
     except:
@@ -501,18 +501,18 @@ if __name__ == '__main__':
                                                      pyalib.__version__,
                                                      pyaxelws.__version__)
     parser = OptionParser(usage='Usage: %prog [options]', version=version)
-    parser.add_option('-a', '--host', dest='host',
-                      type='string', metavar='HOST', default='127.0.0.1',
+    parser.add_option('--host', dest='host',
+                      type='string', default='127.0.0.1',
                       help='bind to address (default 127.0.0.1)')
-    parser.add_option('-p', '--port', dest='port',
-                      type='int', metavar='PORT', default=8002,
+    parser.add_option('--port', dest='port',
+                      type='int', default=8002,
                       help='listen on port (default 8002)')
+    parser.add_option('--daemon', dest='daemon', action='store_true',
+                      help='run daemon')
+    parser.add_option('--kill', dest='kill', action='store_true',
+                      help='kill daemon')
     parser.add_option('-v', '--verbose', dest='verbose', action='store_true',
                       help='print HTTP headers to stdout')
-    parser.add_option('-d', '--daemon', dest='daemon', action='store_true',
-                      help='run in daemon mode')
-    parser.add_option('-k', '--kill', dest='kill', action='store_true',
-                      help='kill daemon process')
 
     opts, args = parser.parse_args()
     sys.exit(setup(vars(opts)))
