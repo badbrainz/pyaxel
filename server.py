@@ -357,21 +357,18 @@ class Channel:
 
     def channel_message(self, msg):
         try:
-            msg = self.inflate_message(msg)
+            msg = json.loads(msg)
             self.state.execute(msg['cmd'], msg.get('req', {}))
         except TransitionError:
-            self.websocket.send_message(self.deflate_message({'status':BAD_REQUEST}))
+            self.send_message({'status':BAD_REQUEST})
         except (StateMachineError, Exception):
             self.close()
 
     def channel_closed(self):
         self.close()
 
-    def deflate_message(self, msg):
-        return json.dumps(msg, separators=(',',':'))
-
-    def inflate_message(self, msg):
-        return json.loads(msg)
+    def send_message(self, msg):
+        self.websocket.send_message(json.dumps(msg, separators=(',',':')))
 
     def start(self, request):
         conf = pyalib.conf_t()
@@ -381,17 +378,17 @@ class Channel:
             setattr(conf, p, prefs[p])
         self.server.add_client(self)
         self.axel = pyaxelws.pyaxel_new(conf, request.get('url'), request.get('metadata'))
-        self.websocket.send_message(self.deflate_message(pyaxelws.pyaxel_status(self.axel)))
+        self.send_message(pyaxelws.pyaxel_status(self.axel))
 
     def stop(self, request):
         self.server.add_client(self)
         pyaxelws.pyaxel_stop(self.axel)
-        self.websocket.send_message(self.deflate_message(pyaxelws.pyaxel_status(self.axel)))
+        self.send_message(pyaxelws.pyaxel_status(self.axel))
 
     def abort(self, request):
         self.server.add_client(self)
         pyaxelws.pyaxel_abort(self.axel)
-        self.websocket.send_message(self.deflate_message(pyaxelws.pyaxel_status(self.axel)))
+        self.send_message(pyaxelws.pyaxel_status(self.axel))
 
     def quit(self, request):
         self.close()
@@ -400,7 +397,7 @@ class Channel:
         pyaxelws.pyaxel_do(self.axel)
         status = pyaxelws.pyaxel_status(self.axel)
         if status:
-            self.websocket.send_message(self.deflate_message(status))
+            self.websocket.send_message(status)
         if not pyaxelws.pyaxel_processes(self.axel):
             self.close(0)
             self.state.start('listening')
