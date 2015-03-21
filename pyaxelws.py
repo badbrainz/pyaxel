@@ -470,16 +470,17 @@ def pyaxel_processes(pyaxel):
 
 def pyaxel_status(pyaxel):
     status = None
+    ready = pyaxel.ready
 
     if pyaxel.pool.numActiveJobs():
-        if pyaxel.ready == 4:
+        if ready == 4:
             status = {'status':RESERVED}
             status['verified_progress'] = pyaxel.verified_progress / pyaxel.size * 100
-        elif pyaxel.ready in (2, 3):
+        elif ready in (2, 3):
             status = {'status':CLOSING}
-        elif pyaxel.ready == -8:
+        elif ready == -8:
             status = {'status': CONNECTING}
-        elif pyaxel.ready == -5:
+        elif ready == -5:
             status = {'status': FOUND}
             status['conf'] = vars(pyaxel.conf)
             status['name'] = pyaxel.file_fname
@@ -488,23 +489,23 @@ def pyaxel_status(pyaxel):
             status['size'] = pyaxel.size
             status['chunks'] = [conn.last_byte - conn.first_byte for conn in pyaxel.conn]
             status['progress'] = [conn.current_byte - conn.first_byte for conn in pyaxel.conn]
-        elif pyaxel.ready == 0:
+        elif ready == 0:
             status = {'status': PROCESSING}
             status['rate'] = format_size(pyaxel.bytes_per_second)
             status['progress'] = [conn.current_byte - conn.first_byte for conn in pyaxel.conn]
     else:
-        if pyaxel.ready in (0, 3, -1):
+        if ready in (0, 3, -1):
             status = {'status':CANCELLED}
-        elif pyaxel.ready == 1:
+        elif ready == 1:
             status = {'status':COMPLETED}
-        elif pyaxel.ready == 2:
+        elif ready == 2:
             status = {'status':STOPPED}
-        elif pyaxel.ready in (-3, -2):
+        elif ready in (-3, -2):
             status = {'status':ERROR}
-        elif pyaxel.ready == -6:
+        elif ready == -6:
             status = {'status':VERIFIED}
             status['verified_progress'] = pyaxel.verified_progress / pyaxel.size * 100
-        elif pyaxel.ready == -7:
+        elif ready == -7:
             status = {'status':INVALID}
 
     if pyaxel.conf.verbose:
