@@ -26,7 +26,6 @@ __version__ = '1.3.0'
 [BAD_REQUEST] = range(100, 101)
 [START, STOP, ABORT, QUIT] = range(4)
 
-
 class Daemon:
     """
     A generic daemon class.
@@ -397,7 +396,7 @@ class Channel:
         pyaxelws.pyaxel_do(self.axel)
         status = pyaxelws.pyaxel_status(self.axel)
         if status:
-            self.websocket.send_message(status)
+            self.send_message(status)
         if not pyaxelws.pyaxel_processes(self.axel):
             self.close(0)
             self.state.start('listening')
