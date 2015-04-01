@@ -244,7 +244,7 @@ def pyaxel_initialize(pyaxel):
 
     pyaxel.size = pyaxel.conn[0].size
 
-    pyaxel.file_fname = pyaxel.conn[0].disposition or pyaxel.conn[0].file_name
+    pyaxel.file_fname = pyaxel.conf.output_filename or pyaxel.conn[0].disposition or pyaxel.conn[0].file_name
     pyaxel.file_fname = pyalib.http_decode(pyaxel.file_fname) or pyaxel.conf.default_filename
     pyaxel.file_fname = pyaxel.file_fname.replace('/', '_')
     pyaxel.file_name = pyaxel.conf.download_path + pyaxel.file_fname
