@@ -521,8 +521,8 @@ def conn_info(conn):
     conn.disposition = http_header(conn.http, 'content-disposition')
     if conn.disposition:
         conn.disposition = conn.disposition.split('filename=')
-        if len(conn.disposition) == 2 and conn.disposition[1].startswith(('"',"'")):
-            conn.disposition = conn.disposition[1][1:-1]
+        if len(conn.disposition) == 2:
+            conn.disposition = conn.disposition[1].strip('"\' ')
         else:
             conn.disposition = None
 
