@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 
 import ConfigParser
-import contextlib
-import httplib
 import os
 import socket
 import stat
